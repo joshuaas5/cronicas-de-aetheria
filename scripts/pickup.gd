@@ -93,15 +93,20 @@ func _physics_process(dt: float) -> void:
 func _collect(p: Node3D) -> void:
 	match kind:
 		"coin":
+			var gain = int(value * (1.0 + Game.stat("gold") / 100.0) * (2.0 if Game.legend("collector") else 1.0))
+			value = max(1, gain)
 			Game.gold += value
+			if Game.legend("collector"):
+				Game.hp = min(Game.max_hp, Game.hp + Game.max_hp * 0.01)
 			Sfx.play("coin")
 			Fx.number(get_parent(), global_position + Vector3(0, 0.8, 0), "+%d" % value, Color(1.0, 0.85, 0.35), 40)
 		"heart":
-			Game.hp = min(Game.max_hp, Game.hp + 15)
+			var h := 10.0 + Game.max_hp * 0.12
+			Game.hp = min(Game.max_hp, Game.hp + h)
 			Sfx.play("heal")
-			Fx.number(get_parent(), global_position + Vector3(0, 0.8, 0), "+15", Color(1.0, 0.5, 0.6), 44)
+			Fx.number(get_parent(), global_position + Vector3(0, 0.8, 0), "+%d" % h, Color(1.0, 0.5, 0.6), 44)
 		_:
-			Game.mp = min(Game.max_mp, Game.mp + 10)
+			Game.mp = min(Game.max_mp, Game.mp + 5.0 + Game.max_mp * 0.15)
 			Sfx.play("heal")
 			Fx.number(get_parent(), global_position + Vector3(0, 0.8, 0), "+10", Color(0.5, 0.7, 1.0), 44)
 	Fx.burst(get_parent(), global_position, (_mesh.material_override as StandardMaterial3D).albedo_color * 2.0, 10, 2.0, 0.4, 0.08, 0.0)

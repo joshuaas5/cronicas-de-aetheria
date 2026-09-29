@@ -142,7 +142,7 @@ func _spawn_island(land: String, animate: bool) -> void:
 	base.rotation.y = randf() * TAU
 	var top_col: Color = {"village": Color(0.95, 1.1, 0.75), "forest": Color(0.8, 1.0, 0.7), "sanctuary": Color(0.6, 0.8, 1.2)}[land]
 	Build.cyl(root, Vector3(0, 0.12, 0), 1.3, 1.25, 0.12, Env.pbr("leafy_grass", 0.8, top_col, true), 24)
-	var batch := Env.FoliageBatch.new(Env.foliage_mat("leaf_cluster_a", Color(0.95, 1.08, 0.8) if land != "sanctuary" else Color(0.9, 0.7, 1.2), Color(0.1, 0.05, 0.2) if land == "sanctuary" else Color.BLACK))
+	var batch = Env.FoliageBatch.new(Env.foliage_mat("leaf_cluster_a", Color(0.95, 1.08, 0.8) if land != "sanctuary" else Color(0.9, 0.7, 1.2), Color(0.1, 0.05, 0.2) if land == "sanctuary" else Color.BLACK))
 	match land:
 		"village":
 			var h := Build.house(root, Vector3(-0.2, 0.18, 0.1), 0.3, {"w": 9.0, "d": 6.0, "h": 3.6, "windows": 3, "chimney": false, "door": false})

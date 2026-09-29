@@ -75,6 +75,21 @@ const SKILLS := {
 	"v_phoenix": {"name": "Renascer", "desc": "Uma vez por área, ao cair, você se levanta com metade da vida.", "branch": "life", "cost": 3, "req": ["v_potion"], "pos": Vector2(1320, 400)},
 }
 
+const TORMENT := [
+	{"name": "Normal", "hp": 1.0, "dmg": 1.0, "xp": 0.0, "luck": 0.0},
+	{"name": "Difícil", "hp": 2.0, "dmg": 1.3, "xp": 0.5, "luck": 0.4},
+	{"name": "Especialista", "hp": 3.2, "dmg": 1.6, "xp": 1.0, "luck": 0.8},
+	{"name": "Mestre", "hp": 5.0, "dmg": 2.0, "xp": 1.6, "luck": 1.3},
+	{"name": "Tormento I", "hp": 8.0, "dmg": 2.5, "xp": 2.5, "luck": 2.0},
+	{"name": "Tormento II", "hp": 12.0, "dmg": 3.1, "xp": 3.5, "luck": 2.7},
+	{"name": "Tormento III", "hp": 18.0, "dmg": 3.8, "xp": 5.0, "luck": 3.5},
+	{"name": "Tormento IV", "hp": 27.0, "dmg": 4.6, "xp": 7.0, "luck": 4.4},
+	{"name": "Tormento V", "hp": 40.0, "dmg": 5.5, "xp": 9.0, "luck": 5.4},
+	{"name": "Tormento VI", "hp": 60.0, "dmg": 6.5, "xp": 12.0, "luck": 6.5},
+]
+const MAX_LEVEL := 70
+const INV_SIZE := 48
+
 const WEAPON_TIERS := [
 	{"name": "Lâmina de Ferro", "cost": 0},
 	{"name": "Lâmina de Aço", "cost": 40},
@@ -105,6 +120,15 @@ var classes: Array = ["knight"]
 var skills: Array = []
 var essence := 0
 var weapon_tier := 0
+var inventory: Array = []
+var equipment := {}
+var dust := 0
+var torment := 0
+var torment_unlocked := 1
+var gear := {}
+var kills := 0
+var best_rift := 0
+var rift_level := 0
 
 
 func _ready() -> void:
@@ -118,12 +142,13 @@ func _setup_input() -> void:
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"attack": [KEY_J, KEY_Z], "magic": [KEY_K, KEY_X], "dodge": [KEY_L, KEY_SHIFT, KEY_C],
 		"interact": [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER], "spell_next": [KEY_E, KEY_TAB], "spell_prev": [KEY_Q],
-		"potion": [KEY_R], "pause": [KEY_ESCAPE, KEY_P], "mute": [KEY_M], "tree": [KEY_T, KEY_I],
+		"potion": [KEY_R], "pause": [KEY_ESCAPE, KEY_P], "mute": [KEY_M], "tree": [KEY_T],
+		"inventory": [KEY_I, KEY_B], "view": [KEY_V], "salvage": [KEY_X, KEY_DELETE], "salvage_all": [KEY_G],
 	}
 	var pads := {
 		"attack": [JOY_BUTTON_X], "magic": [JOY_BUTTON_Y], "dodge": [JOY_BUTTON_B], "interact": [JOY_BUTTON_A],
 		"spell_next": [JOY_BUTTON_RIGHT_SHOULDER], "spell_prev": [JOY_BUTTON_LEFT_SHOULDER],
-		"potion": [JOY_BUTTON_BACK], "pause": [JOY_BUTTON_START], "tree": [JOY_BUTTON_LEFT_STICK],
+		"potion": [JOY_BUTTON_BACK], "pause": [JOY_BUTTON_START], "tree": [JOY_BUTTON_LEFT_STICK], "view": [JOY_BUTTON_RIGHT_STICK],
 		"move_up": [JOY_BUTTON_DPAD_UP], "move_down": [JOY_BUTTON_DPAD_DOWN],
 		"move_left": [JOY_BUTTON_DPAD_LEFT], "move_right": [JOY_BUTTON_DPAD_RIGHT],
 	}
@@ -138,6 +163,10 @@ func _setup_input() -> void:
 			var jb := InputEventJoypadButton.new()
 			jb.button_index = b
 			InputMap.action_add_event(action, jb)
+	for pair in [["attack", MOUSE_BUTTON_LEFT], ["magic", MOUSE_BUTTON_RIGHT]]:
+		var mb := InputEventMouseButton.new()
+		mb.button_index = pair[1]
+		InputMap.action_add_event(pair[0], mb)
 	var axes := {"move_left": [JOY_AXIS_LEFT_X, -1.0], "move_right": [JOY_AXIS_LEFT_X, 1.0], "move_up": [JOY_AXIS_LEFT_Y, -1.0], "move_down": [JOY_AXIS_LEFT_Y, 1.0]}
 	for action in axes:
 		var jm := InputEventJoypadMotion.new()
@@ -159,15 +188,19 @@ func class_data() -> Dictionary:
 ## Rebuilds every derived stat from level, class, skills and weapon.
 func recalc() -> void:
 	var c := class_data()
-	var ending := 1 if flags.get("ending", false) else 0
-	var hp_base := 60.0 + 8.0 * (lvl - 1) + (20.0 if has_skill("v_root") else 0.0) + 20.0 * ending
-	var mp_base := 30.0 + 4.0 * (lvl - 1) + (8.0 if has_skill("m_flow") else 0.0) + 10.0 * ending
+	var ending = 1 if flags.get("ending", false) else 0
+	gear = {}
+	for s in Items.SLOTS:
+		if equipment.get(s) != null:
+			Items.add_stats(gear, equipment[s])
+	var hp_base = 60.0 + 8.0 * (lvl - 1) + (20.0 if has_skill("v_root") else 0.0) + 20.0 * ending + stat("hp")
+	var mp_base = 30.0 + 4.0 * (lvl - 1) + (8.0 if has_skill("m_flow") else 0.0) + 10.0 * ending + stat("mp")
 	var old_max_hp := max_hp
 	var old_max_mp := max_mp
 	max_hp = round(hp_base * c["hp"])
 	max_mp = round(mp_base * c["mp"])
-	atk = (9.0 + 2.0 * (lvl - 1) + weapon_tier * 3.0 + (4.0 if has_skill("s_edge") else 0.0)) * c["atk"]
-	mag = (10.0 + 2.0 * (lvl - 1)) * c["mag"]
+	atk = (9.0 + 2.0 * (lvl - 1) + weapon_tier * 3.0 + (4.0 if has_skill("s_edge") else 0.0) + stat("atk")) * c["atk"]
+	mag = (10.0 + 2.0 * (lvl - 1) + stat("mag")) * c["mag"]
 	# keep the same fraction of health/mana when the maximum changes
 	if old_max_hp > 0.0:
 		hp = clamp(hp * max_hp / old_max_hp, 1.0 if hp > 0.0 else 0.0, max_hp)
@@ -176,23 +209,72 @@ func recalc() -> void:
 	stats_changed.emit()
 
 
+func stat(k: String) -> float:
+	return float(gear.get(k, 0.0))
+
+
+func legend(k: String) -> bool:
+	return gear.has("legend_" + k)
+
+
 func crit_chance() -> float:
-	return class_data()["crit"] + (0.15 if has_skill("s_crit") else 0.0)
+	return min(0.75, class_data()["crit"] + (0.15 if has_skill("s_crit") else 0.0) + stat("crit") / 100.0)
+
+
+func crit_mult() -> float:
+	return 2.0 + stat("critdmg") / 100.0
+
+
+func attack_speed() -> float:
+	return 1.0 + stat("aspd") / 100.0
+
+
+func move_speed() -> float:
+	return 1.0 + stat("move") / 100.0 + (0.3 if legend("hermes") else 0.0)
+
+
+func leech() -> float:
+	return stat("leech") / 100.0 + (0.08 if legend("vampire") else 0.0)
+
+
+func element_mult(kind: String) -> float:
+	if kind in ["fire", "burn"]:
+		return 1.0 + stat("fire") / 100.0
+	if kind == "ice":
+		return 1.0 + stat("ice") / 100.0
+	if kind == "bolt":
+		return 1.0 + stat("bolt") / 100.0
+	return 1.0
+
+
+## Fraction of incoming damage removed by armor against a monster of `mlvl`.
+func damage_reduction(mlvl: int) -> float:
+	var a := stat("armor") + weapon_tier * 4.0
+	return min(0.75, a / (a + 40.0 + mlvl * 14.0))
+
+
+func magic_find() -> float:
+	return stat("mf") / 100.0 + TORMENT[torment]["luck"]
 
 
 func spell_cost(id: String) -> int:
-	return int(ceil(SPELLS[id]["cost"] * class_data()["spell_cost"]))
+	return int(ceil(SPELLS[id]["cost"] * class_data()["spell_cost"] * max(0.4, 1.0 - stat("cost") / 100.0)))
+
+
+## Monsters scale with the hero so loot always stays relevant.
+func monster_level(area_min: int) -> int:
+	return max(area_min, lvl)
 
 
 func xp_next() -> int:
-	return int(round(18.0 * pow(lvl, 1.45)))
+	return int(round(18.0 * pow(lvl, 1.55)))
 
 
 ## Returns true when the hero levels up.
 func gain_xp(n: int) -> bool:
-	xp += n
+	xp += int(n * (1.0 + TORMENT[torment]["xp"]))
 	var leveled := false
-	while xp >= xp_next():
+	while xp >= xp_next() and lvl < MAX_LEVEL:
 		xp -= xp_next()
 		lvl += 1
 		essence += 1
@@ -306,6 +388,9 @@ func new_game() -> void:
 	current_level = "village"
 	map_here = "village"
 	cls = "knight"; classes = ["knight"]; skills = []; essence = 0; weapon_tier = 0
+	inventory = []; equipment = {}; dust = 0; torment = 0; torment_unlocked = 1; kills = 0; best_rift = 0
+	equipment["weapon"] = Items.generate(1, 0, "weapon")
+	equipment["chest"] = Items.generate(1, 0, "chest")
 	max_hp = 0.0; max_mp = 0.0
 	recalc()
 	hp = max_hp
@@ -324,8 +409,10 @@ func save_game() -> void:
 	var data := {
 		"hp": hp, "mp": mp, "lvl": lvl, "xp": xp, "gold": gold, "potions": potions, "spells": spells,
 		"flags": flags, "lands": lands_out, "arts": arts,
-		"level": "forest1" if current_level == "forest2" else current_level, "map_here": map_here,
+		"level": {"forest2": "forest1", "rift": "village"}.get(current_level, current_level), "map_here": map_here,
 		"cls": cls, "classes": classes, "skills": skills, "essence": essence, "weapon_tier": weapon_tier,
+		"inventory": inventory, "equipment": equipment, "dust": dust, "torment": torment,
+		"torment_unlocked": torment_unlocked, "kills": kills, "best_rift": best_rift, "next_id": Items._next_id,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f:
@@ -357,9 +444,83 @@ func load_game() -> bool:
 	skills = d.get("skills", [])
 	essence = int(d.get("essence", lvl - 1))
 	weapon_tier = int(d.get("weapon_tier", 0))
+	inventory = d.get("inventory", [])
+	equipment = d.get("equipment", {})
+	for k in equipment.keys():
+		if equipment[k] == null:
+			equipment.erase(k)
+	dust = int(d.get("dust", 0))
+	torment = int(d.get("torment", 0))
+	torment_unlocked = int(d.get("torment_unlocked", 1))
+	kills = int(d.get("kills", 0))
+	best_rift = int(d.get("best_rift", 0))
+	Items._next_id = int(d.get("next_id", 1000))
+	# JSON turns ints into floats; normalise the numbers items rely on
+	for it in inventory + equipment.values():
+		it["rarity"] = int(it["rarity"])
+		it["ilvl"] = int(it["ilvl"])
 	max_hp = 0.0; max_mp = 0.0
 	recalc()
 	hp = clamp(float(d.get("hp", max_hp)), 1.0, max_hp)
 	mp = clamp(float(d.get("mp", max_mp)), 0.0, max_mp)
 	stats_changed.emit()
 	return true
+
+
+
+# ---------------------------------------------------------------- inventory
+
+func add_item(item: Dictionary) -> bool:
+	if inventory.size() >= INV_SIZE:
+		return false
+	inventory.append(item)
+	return true
+
+
+## Equips inventory item `idx`, swapping out whatever was there.
+func equip(idx: int) -> void:
+	var item: Dictionary = inventory[idx]
+	var slot: String = item["slot"]
+	if slot == "ring":
+		slot = "ring1" if equipment.get("ring1") == null or (equipment.get("ring2") != null and Items.score(equipment["ring1"]) <= Items.score(equipment["ring2"])) else "ring2"
+	var old = equipment.get(slot)
+	equipment[slot] = item
+	inventory.remove_at(idx)
+	if old != null:
+		inventory.insert(idx, old)
+	recalc()
+
+
+func unequip(slot: String) -> void:
+	if equipment.get(slot) == null or inventory.size() >= INV_SIZE:
+		return
+	inventory.append(equipment[slot])
+	equipment[slot] = null
+	recalc()
+
+
+func salvage(idx: int) -> int:
+	var v := Items.salvage_value(inventory[idx])
+	dust += v
+	inventory.remove_at(idx)
+	return v
+
+
+## Salvages every Common and Magic item in the bag.
+func salvage_junk() -> int:
+	var got := 0
+	for i in range(inventory.size() - 1, -1, -1):
+		if int(inventory[i]["rarity"]) <= 1:
+			got += salvage(i)
+	return got
+
+
+func equipped_for(item: Dictionary):
+	var slot: String = item["slot"]
+	if slot == "ring":
+		var a = equipment.get("ring1")
+		var b = equipment.get("ring2")
+		if a == null or b == null:
+			return null
+		return a if Items.score(a) <= Items.score(b) else b
+	return equipment.get(slot)

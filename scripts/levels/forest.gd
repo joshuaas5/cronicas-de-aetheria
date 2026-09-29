@@ -104,7 +104,7 @@ func build() -> void:
 			Build.mushroom(self, mp, randf_range(0.9, 1.5), Color(0.55, 0.25, 1.0), 2.5)
 		else:
 			Build.mushroom(self, mp, randf_range(0.8, 1.6), [Color(0.92, 0.14, 0.08), Color(1.0, 0.55, 0.1)][randi() % 2])
-	var flies := Fx.emitter(self, Color(2.2, 2.6, 0.9) if not cor else Color(2.0, 1.0, 2.8), 70, 6.0, 0.07, 0.25, 0.05, Vector3(28, 1.5, 9))
+	var flies = Fx.emitter(self, Color(2.2, 2.6, 0.9) if not cor else Color(2.0, 1.0, 2.8), 70, 6.0, 0.07, 0.25, 0.05, Vector3(28, 1.5, 9))
 	flies.position = Vector3(0, 1.3, 1)
 	finish_batches()
 	build_walls()
@@ -142,7 +142,7 @@ func _trees() -> void:
 	# bushes along the forest edges
 	for i in 90:
 		var bx := randf_range(bounds.position.x - 6, bounds.end.x + 6)
-		var bz := bounds.position.y - randf_range(-0.5, 9.0) if i % 3 != 0 else bounds.end.y + randf_range(0.5, 3.5)
+		var bz = bounds.position.y - randf_range(-0.5, 9.0) if i % 3 != 0 else bounds.end.y + randf_range(0.5, 3.5)
 		Env.bush(Vector3(bx, height_at(bx, bz), bz), batch_bush, randf_range(1.2, 2.4) if i % 3 != 0 else randf_range(0.5, 0.9), 55)
 
 
@@ -182,18 +182,18 @@ func on_enter() -> void:
 	var p: Vector3 = m.player.global_position if m.player.get_parent() else Vector3.ZERO
 	seed(Time.get_ticks_msec())
 	if clearing:
-		if not Game.flags.get("boss_defeated", false):
+		var boss_back: bool = Game.flags.get("boss_defeated", false) and Game.torment > int(Game.flags.get("boss_torment", -1))
+		if not Game.flags.get("boss_defeated", false) or boss_back:
 			var b := Boss.new()
 			add_child(b)
 			b.global_position = Vector3(0, 0, -4.5)
 			m.on_boss_spawned(b)
 		else:
 			for i in 3:
-				m.spawn_enemy("warrior", random_point(p, 9.0), false)
-			m.spawn_enemy("mage", random_point(p, 10.0), true)
+				m.spawn_pack(random_point(p, 9.0), Game.monster_level(4), ["warrior", "mage", "minion"])
 	else:
-		for i in 4:
-			m.spawn_enemy("minion", random_point(p, 9.0))
-		m.spawn_enemy("rogue", random_point(p, 10.0))
+		var types := ["minion", "minion", "rogue"]
 		if Game.flags.get("boss_defeated", false):
-			m.spawn_enemy("mage", random_point(p, 10.0))
+			types.append("mage")
+		for i in 5:
+			m.spawn_pack(random_point(p, 10.0), Game.monster_level(1), types)

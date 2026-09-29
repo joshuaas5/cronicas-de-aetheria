@@ -442,7 +442,7 @@ static func _tube(st: SurfaceTool, path: Array, radii: Array, sides: int, base_i
 			fwd = (path[i + 1] - p).normalized()
 		else:
 			fwd = (p - path[i - 1]).normalized()
-		var side := fwd.cross(Vector3.FORWARD if abs(fwd.y) > 0.9 else Vector3.UP).normalized()
+		var side = fwd.cross(Vector3.FORWARD if abs(fwd.y) > 0.9 else Vector3.UP).normalized()
 		if abs(fwd.y) > 0.9:
 			side = Vector3.RIGHT
 		var up := side.cross(fwd).normalized()

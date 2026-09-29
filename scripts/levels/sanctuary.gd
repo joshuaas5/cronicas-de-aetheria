@@ -150,7 +150,7 @@ func build() -> void:
 		x += randf_range(5, 7.5)
 	for i in 36:
 		var bx := randf_range(bounds.position.x - 5, bounds.end.x + 5)
-		var bz := randf_range(bounds.position.y - 6, bounds.position.y + 1) if i % 3 != 0 else bounds.end.y + randf_range(0.5, 3.0)
+		var bz = randf_range(bounds.position.y - 6, bounds.position.y + 1) if i % 3 != 0 else bounds.end.y + randf_range(0.5, 3.0)
 		if abs(bx) < 7.0 and bz < 0.0:
 			continue
 		Env.bush(Vector3(bx, height_at(bx, bz), bz), batch_bush, randf_range(0.8, 1.5), 40)
@@ -219,10 +219,8 @@ func on_enter() -> void:
 		return
 	var m := main()
 	var p: Vector3 = m.player.global_position if m.player.get_parent() else Vector3.ZERO
-	for i in 2:
-		m.spawn_enemy("mage", random_point(p, 10.0), i == 0)
-	for i in 2:
-		m.spawn_enemy("warrior", random_point(p, 9.0), false)
+	for i in 4:
+		m.spawn_pack(random_point(p, 9.0), Game.monster_level(8), ["mage", "warrior", "rogue"])
 
 
 func bloom() -> void:

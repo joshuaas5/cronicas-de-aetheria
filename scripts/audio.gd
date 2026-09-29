@@ -46,7 +46,7 @@ func music(name: String, fade := 1.2) -> void:
 	var nxt := _music[_cur]
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(old, "volume_db", -80.0, fade)
-	var s := _stream("music", name) if name != "" else null
+	var s = _stream("music", name) if name != "" else null
 	if s:
 		if s is AudioStreamWAV:
 			(s as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
@@ -61,7 +61,7 @@ func ambience(name: String) -> void:
 	if name == _amb_name:
 		return
 	_amb_name = name
-	var s := _stream("ambience", name) if name != "" else null
+	var s = _stream("ambience", name) if name != "" else null
 	if s == null:
 		_amb.stop()
 		return

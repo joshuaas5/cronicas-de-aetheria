@@ -52,9 +52,9 @@ static func house(parent: Node, pos: Vector3, yaw := 0.0, o := {}) -> Node3D:
 	var d: float = o.get("d", 6.0)
 	var h: float = o.get("h", 3.6)
 	var stone := Env.pbr("medieval_blocks_02", 0.6, Color(0.95, 0.93, 0.9), true)
-	var plaster := Env.pbr("plastered_wall_04", 0.45, o.get("wall_tint", Color(1.0, 0.97, 0.92)), true)
+	var plaster = Env.pbr("plastered_wall_04", 0.45, o.get("wall_tint", Color(1.0, 0.97, 0.92)), true)
 	var wood := Env.pbr("medieval_wood", 0.8, Color(0.75, 0.6, 0.48), true)
-	var roof := Env.pbr("roof_tiles_14", 0.55, o.get("roof_tint", Color(1.0, 0.8, 0.7)), true)
+	var roof = Env.pbr("roof_tiles_14", 0.55, o.get("roof_tint", Color(1.0, 0.8, 0.7)), true)
 	var base_h := 0.7
 	box(root, Vector3(0, base_h * 0.5, 0), Vector3(w + 0.4, base_h, d + 0.4), stone)
 	box(root, Vector3(0, base_h + h * 0.5, 0), Vector3(w, h, d), plaster)
@@ -93,7 +93,7 @@ static func house(parent: Node, pos: Vector3, yaw := 0.0, o := {}) -> Node3D:
 		box(root, Vector3(0, base_h + h + rh * 0.5 + 0.08, sz * (d * 0.25 + over * 0.2)), Vector3(w + over * 2, 0.22, slab_len), roof, Vector3(sz * slope, 0, 0))
 	box(root, Vector3(0, base_h + h + rh + 0.05, 0), Vector3(w + over * 2 + 0.1, 0.28, 0.4), wood)
 	# windows
-	var glass := window_glass(o.get("window_energy", 1.4))
+	var glass = window_glass(o.get("window_energy", 1.4))
 	var nwin: int = o.get("windows", 2)
 	for i in nwin:
 		var x := -w * 0.5 + w * (i + 0.5) / nwin
@@ -304,7 +304,7 @@ static func mushroom(parent: Node, pos: Vector3, s := 1.0, cap := Color(0.9, 0.1
 		ds.height = ds.radius * 1.2
 		dot.mesh = ds
 		dot.material_override = dot_m
-		var y := 1.05 * s + sqrt(max(0.0, (0.62 * s) * (0.62 * s) - r * r)) * 0.75
+		var y = 1.05 * s + sqrt(max(0.0, (0.62 * s) * (0.62 * s) - r * r)) * 0.75
 		dot.position = Vector3(cos(a) * r, y, sin(a) * r)
 		root.add_child(dot)
 	if glow > 0.0:

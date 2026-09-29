@@ -60,7 +60,7 @@ func add_flowers(rect: Rect2, count: int, density_fn: Callable, glow := Color.BL
 		if rng.randf() > density_fn.call(x, z):
 			continue
 		var p := Vector3(x, height_at(x, z), z)
-		var batch := warm if rng.randf() < 0.55 else cool
+		var batch = warm if rng.randf() < 0.55 else cool
 		for k in 2:
 			var b := Basis(Vector3.UP, rng.randf() * PI + k * PI * 0.5)
 			var s := rng.randf_range(0.55, 0.95)

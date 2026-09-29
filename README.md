@@ -10,13 +10,15 @@ RPG de ação medieval com magia, feito em Godot 4.7. Cenários com assets escan
 | Ação | Teclado | Controle |
 | --- | --- | --- |
 | Mover | WASD / setas | Analógico esquerdo / direcional |
-| Espada (combo de 3 golpes) | J | X |
-| Magia | K | Y |
+| Espada (combo de 3 golpes) | J / clique esquerdo | X |
+| Magia | K / clique direito | Y |
 | Esquiva (invencível durante o rolamento) | L / Shift | B |
 | Trocar magia | Q / E | LB / RB |
 | Poção | R | Back |
 | Falar / confirmar | Espaço / Enter | A |
 | Árvore de Mana | T | L3 |
+| Inventário | I / B | — |
+| Primeira pessoa (mouse para olhar) | V | R3 |
 | Pausa | Esc | Start |
 | Som liga/desliga | M | — |
 
@@ -25,6 +27,17 @@ RPG de ação medieval com magia, feito em Godot 4.7. Cenários com assets escan
 - **Árvore de Mana (T):** cada nível dá 1 Essência, e chefes dão mais. Três galhos (Espada, Magia, Vida), com 15 habilidades: críticos, giro, investida, quarto golpe, Chama Voraz, Nevasca, a magia Relâmpago, Eco Arcano, regeneração, espinhos e Renascer.
 - **Vocações:** Cavaleiro, Ladina, Bárbaro e Mago, liberadas pela história e trocadas no Altar das Vocações, na praça da vila.
 - **Forja:** depois que o bosque é plantado, o ferreiro Ferro chega à vila e forja cinco níveis de arma.
+
+## Loot e fim de jogo (estilo Diablo)
+
+- **Itens aleatórios** em 8 espaços (arma, elmo, peitoral, luvas, botas, amuleto e 2 anéis), com raridades Comum, Mágico, Raro, Lendário e Ancestral e 20 afixos (crítico, velocidade de ataque, roubo de vida, dano elemental, achado mágico…).
+- **16 lendários com poderes únicos:** Chama que explode duas vezes, Relâmpago que salta 9 vezes, rastro de fogo na esquiva, meteoros a cada magia, onda de choque, golpes duplos…
+- **Inventário (I):** compare com o equipado, desmonte em Pó de Mana (X, ou G para todos os comuns e mágicos).
+- **Elites:** campeões azuis e raros amarelos com nomes gerados e afixos (Veloz, Vampírico, Explosivo, Congelante, Blindado, Teleportador, Incendiário, Invocador, Arcano). E o **Duende Ganancioso**, que foge com tesouro.
+- **Monstros acompanham seu nível**, então o loot nunca fica obsoleto.
+- **Pedra do Tormento:** 10 dificuldades, de Normal a Tormento VI. Mais vida e dano nos monstros, mais XP e loot muito melhor.
+- **Fendas de Mana (Obelisco na vila):** arenas aleatórias. Encha a barra, derrote o Guardião em 5 minutos e o próximo nível é liberado, sem limite.
+- **Na vila:** Borin compra itens, Nix aposta Pó de Mana em itens aleatórios, e Ferro reforja armas e transmuta Pó em itens raros.
 
 ## A história
 

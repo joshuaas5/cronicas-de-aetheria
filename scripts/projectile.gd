@@ -9,6 +9,7 @@ var radius := 0.35
 var life := 2.5
 var kind := "orb"     # fire, ice, orb, thorn
 var slow := 0.0
+var attacker: Node = null
 var _trail: GPUParticles3D
 var _light: OmniLight3D
 
@@ -97,7 +98,7 @@ func _physics_process(dt: float) -> void:
 				return
 	else:
 		for p in get_tree().get_nodes_in_group("player"):
-			if here.distance_to(Vector2(p.global_position.x, p.global_position.z)) < radius + 0.45 and p.hurt(damage, global_position, null):
+			if here.distance_to(Vector2(p.global_position.x, p.global_position.z)) < radius + 0.45 and p.hurt(damage, global_position, attacker):
 				_explode(null)
 				return
 	if life <= 0.0:
@@ -108,11 +109,14 @@ func _hit(target: Node) -> void:
 	if kind == "fire":
 		_explode(target)
 		return
-	if target.has_method("take_damage"):
+	var pl := get_tree().get_first_node_in_group("player")
+	if pl and pl.has_method("deal"):
+		pl.deal(target, damage, velocity.normalized() * 4.0, kind)
+	elif target.has_method("take_damage"):
 		target.take_damage(damage, velocity.normalized() * 4.0, kind)
 		if kind == "ice" and target.has_method("apply_slow"):
 			target.apply_slow(2.5)
-			if Game.has_skill("m_frost") and randf() < 0.3 and target.has_method("apply_stun"):
+			if (Game.legend("winter") or (Game.has_skill("m_frost") and randf() < 0.3)) and target.has_method("apply_stun"):
 				target.apply_stun(1.4)
 				Fx.burst(get_parent(), global_position, Color(1.5, 2.2, 3.0), 24, 2.0, 0.8, 0.2, -2.0)
 	_explode(null)
@@ -129,19 +133,29 @@ func _explode(_direct: Node) -> void:
 		if main:
 			main.shake(0.35)
 		var here := Vector2(global_position.x, global_position.z)
-		var blast := 3.6 if Game.has_skill("m_blaze") else 2.4
+		var blast = 3.6 if Game.has_skill("m_blaze") else 2.4
 		if blast > 3.0:
 			Fx.burst(parent, global_position, Color(3.0, 1.0, 0.25), 60, 10.0, 0.6, 0.3, -1.0)
 		for e in get_tree().get_nodes_in_group("enemies"):
 			if e.is_alive() and here.distance_to(Vector2(e.global_position.x, e.global_position.z)) < blast + e.radius:
 				var d: Vector3 = (e.global_position - global_position)
 				d.y = 0
-				e.take_damage(damage, d.normalized() * 7.0, "fire")
+				var pl := get_tree().get_first_node_in_group("player")
+				if pl:
+					pl.deal(e, damage, d.normalized() * 7.0, "fire")
+				else:
+					e.take_damage(damage, d.normalized() * 7.0, "fire")
 				if Game.has_skill("m_blaze") and e.has_method("apply_burn"):
 					e.apply_burn(3.0)
 		for b in get_tree().get_nodes_in_group("boss"):
 			if b.can_be_hit() and b.hit_test(global_position, blast):
-				b.take_damage(damage, Vector3.ZERO, "fire")
+				var pl2 := get_tree().get_first_node_in_group("player")
+				if pl2:
+					pl2.deal(b, damage, Vector3.ZERO, "fire")
+		if Game.legend("phoenix") and not has_meta("second"):
+			var again := Hazard.new().setup("blast", "player", blast, damage, 0.0, 0.35)
+			parent.add_child(again)
+			again.global_position = global_position
 	elif kind == "ice":
 		Fx.burst(parent, global_position, Color(1.2, 2.0, 2.6), 16, 3.0, 0.4, 0.12, -6.0)
 	else:

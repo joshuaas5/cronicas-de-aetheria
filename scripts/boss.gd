@@ -15,6 +15,9 @@ var cd := 2.5
 var arm_angle := 0.9
 var dead := false
 var radius := 1.6
+var mlvl := 4
+var rank := "boss"
+var dmg_mult := 1.0
 var arm_l: Node3D
 var arm_r: Node3D
 var eyes: Array[MeshInstance3D] = []
@@ -28,6 +31,11 @@ var _level: Node
 
 func _ready() -> void:
 	add_to_group("boss")
+	mlvl = Game.monster_level(4)
+	var tm: Dictionary = Game.TORMENT[Game.torment]
+	max_hp = 420.0 * pow(1.11, mlvl - 4) * tm["hp"]
+	hp = max_hp
+	dmg_mult = pow(1.075, mlvl - 4) * tm["dmg"]
 	_level = get_parent()
 	body = Node3D.new()
 	add_child(body)
@@ -196,25 +204,25 @@ func _choose(player: Node3D) -> void:
 	var r := randf()
 	var skeletons := get_tree().get_nodes_in_group("enemies").size()
 	if r < 0.4:
-		var n := 13 if phase == 2 else 9
+		var n = 13 if phase == 2 else 9
 		var base := atan2(to_p.x, to_p.z)
 		for i in n:
-			var a := base + (i - (n - 1) * 0.5) * 0.14
-			var p := Projectile.new().setup("thorn", "enemy", Vector3(sin(a), 0, cos(a)) * 8.0, 8.0)
+			var a = base + (i - (n - 1) * 0.5) * 0.14
+			var p := Projectile.new().setup("thorn", "enemy", Vector3(sin(a), 0, cos(a)) * 8.0, 8.0 * dmg_mult)
 			p.life = 3.5
 			_level.add_child(p)
 			p.global_position = global_position + Vector3(0, 1.3, 1.4)
 		Sfx.play("orb")
 		cd = 2.0
 	elif r < 0.78 or skeletons >= 3:
-		var n := 5 if phase == 2 else 3
+		var n = 5 if phase == 2 else 3
 		for i in n:
-			var off := Vector3.ZERO if i == 0 else Vector3(randf_range(-3, 3), 0, randf_range(-2, 2))
+			var off = Vector3.ZERO if i == 0 else Vector3(randf_range(-3, 3), 0, randf_range(-2, 2))
 			_root_spike(player.global_position + off)
 		cd = 2.3
 	else:
 		for i in 2:
-			var e := Enemy.new().setup("minion", true)
+			var e := Enemy.new().setup("minion", false, "minion", mlvl)
 			_level.add_child(e)
 			e.global_position = global_position + Vector3(randf_range(-4, 4), 0, randf_range(2.5, 4.0))
 		cd = 2.4
@@ -241,7 +249,7 @@ func _root_spike(pos: Vector3) -> void:
 		Sfx.play("hit", -4.0)
 		var pl: Node3D = get_tree().get_first_node_in_group("player")
 		if pl and Vector2(pl.global_position.x - pos.x, pl.global_position.z - pos.z).length() < 1.2:
-			pl.hurt(13.0 if phase == 2 else 10.0, pos, null)
+			pl.hurt((13.0 if phase == 2 else 10.0) * dmg_mult, pos, self)
 	)
 
 
@@ -256,7 +264,7 @@ func _slam(player: Node3D) -> void:
 	if player:
 		var d := Vector2(player.global_position.x - front.x, player.global_position.z - front.z).length()
 		if d < 5.0:
-			player.hurt(16.0 if phase == 2 else 12.0, global_position, self)
+			player.hurt((16.0 if phase == 2 else 12.0) * dmg_mult, global_position, self)
 
 
 func take_damage(amount: float, _push: Vector3, kind: String) -> void:
@@ -266,7 +274,7 @@ func take_damage(amount: float, _push: Vector3, kind: String) -> void:
 		amount *= 1.5
 	hp -= amount
 	_flash = 0.1
-	var col := Color(1, 0.65, 0.3) if kind == "fire" else Color(0.9, 0.8, 1.0)
+	var col = Color(1, 0.65, 0.3) if kind == "fire" else Color(0.9, 0.8, 1.0)
 	if kind == "crit":
 		col = Color(1.0, 0.85, 0.2)
 	Fx.number(_level, global_position + Vector3(randf_range(-1.5, 1.5), randf_range(3.5, 6.0), 1.5), ("%d!" if kind in ["fire", "crit"] else "%d") % amount, col, 90 if kind in ["fire", "crit"] else 64)
@@ -277,7 +285,7 @@ func take_damage(amount: float, _push: Vector3, kind: String) -> void:
 		Game.toast.emit("O Carvalho Ancião enfurece!")
 		aura.amount = 180
 		for i in 3:
-			var e := Enemy.new().setup("minion", true)
+			var e := Enemy.new().setup("minion", false, "minion", mlvl)
 			_level.add_child(e)
 			e.global_position = global_position + Vector3(randf_range(-5, 5), 0, randf_range(2.5, 5.0))
 	if hp <= 0.0:

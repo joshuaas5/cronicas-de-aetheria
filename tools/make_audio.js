@@ -395,6 +395,11 @@ function makeSfx() {
   sfx('roar', 1.6, b => { tone(b, 0, 95, 45, 1.4, 0.8, 'saw'); tone(b, 0, 142, 70, 1.4, 0.4, 'saw', 0.3); crunch(b, 0, 1.2, 0.5, 0.04); }, 0.3);
   sfx('bloom', 2.2, b => arp(b, [330, 494, 659, 831, 988, 1319, 1661], 0.12, (t, f) => bell(b, t, f, 1.2, 0.2, Math.sin(t * 7) * 0.5)), 0.5);
   sfx('spawn', 0.9, b => { crunch(b, 0, 0.7, 0.6, 0.06); tone(b, 0.1, 80, 160, 0.6, 0.3, 'saw'); }, 0.2);
+  sfx('legendary', 2.4, b => { tone(b, 0, 80, 40, 0.8, 0.6, 'sine'); arp(b, [523, 784, 1047, 1568, 2093], 0.09, (t, f) => bell(b, t + 0.1, f, 1.4, 0.3, Math.sin(t * 9) * 0.5)); whoosh(b, 0, 0.8, 0.3, 0.02, 0.2); }, 0.45);
+  sfx('rare_drop', 1.0, b => arp(b, [880, 1175, 1480], 0.07, (t, f) => bell(b, t, f, 0.5, 0.22, 0)), 0.3);
+  sfx('pickup', 0.3, b => { tone(b, 0, 600, 900, 0.08, 0.25, 'triangle'); tone(b, 0.05, 900, 1200, 0.1, 0.2, 'triangle'); }, 0.1);
+  sfx('equip', 0.4, b => { crunch(b, 0, 0.1, 0.5, 0.6); tone(b, 0, 300, 200, 0.12, 0.3, 'square'); tone(b, 0.06, 1200, 1100, 0.15, 0.15, 'sine'); }, 0.15);
+  sfx('goblin', 1.0, b => { for (let i = 0; i < 6; i++) tone(b, i * 0.08, 900 + (i % 2) * 400, 700 + (i % 2) * 500, 0.07, 0.25, 'square', (i % 2) - 0.5); for (let i = 0; i < 5; i++) tone(b, 0.5 + i * 0.05, 1600, 2000, 0.05, 0.2, 'square'); }, 0.2);
   sfx('zap', 0.6, b => { for (let i = 0; i < 14; i++) { const t = i * 0.025; crunch(b, t, 0.03, 0.7, 0.9); tone(b, t, 3000 - i * 120, 900, 0.03, 0.3, 'square', (i % 2) - 0.5); } tone(b, 0, 180, 60, 0.4, 0.5, 'saw'); }, 0.25);
   sfx('bones', 0.7, b => { for (let i = 0; i < 9; i++) { const t = i * 0.05 + rand() * 0.03; tone(b, t, 900 + rand() * 900, 500, 0.05, 0.3, 'square', rand() - 0.5); crunch(b, t, 0.04, 0.3, 0.6); } });
 }

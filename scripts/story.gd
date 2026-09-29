@@ -72,6 +72,7 @@ static func innkeeper() -> void:
 	say([{"n": "Borin", "t": "Bem-vindo ao Javali Dourado! O que vai ser?", "ch": [
 		{"l": "Descansar (10 ouro)", "f": _rest},
 		{"l": "Poção (15 ouro)", "f": _buy_potion},
+		{"l": "Vender itens comuns e mágicos", "f": _sell_junk},
 		{"l": "Nada, obrigado", "f": _nothing},
 	]}])
 
@@ -113,6 +114,9 @@ static func bard() -> void:
 
 
 static func fairy() -> void:
+	if Game.spells.has("ice") and Game.lvl >= 3:
+		gamble()
+		return
 	if not Game.spells.has("ice"):
 		say([
 			{"n": "Nix", "t": "Psiu! Sou Nix, uma sprite de orvalho. Você sente? A mana pulsa mais forte perto de você."},
@@ -165,7 +169,7 @@ static func altar() -> void:
 		ch.append({"l": label, "f": Callable(Story, "_choose_class").bind(id)})
 	ch.append({"l": "Voltar", "f": _nothing})
 	var locked := Game.CLASSES.size() - Game.classes.size()
-	var hint := "" if locked == 0 else "  Ainda há %d vocações adormecidas." % locked
+	var hint = "" if locked == 0 else "  Ainda há %d vocações adormecidas." % locked
 	say([{"n": "Altar das Vocações", "t": "A pedra vibra sob sua mão. Qual caminho você quer seguir?" + hint, "ch": ch}])
 
 
@@ -180,11 +184,17 @@ static func _choose_class(id: String) -> void:
 static func smith() -> void:
 	var t := Game.weapon_tier
 	if t >= Game.WEAPON_TIERS.size() - 1:
-		say([{"n": "Ferro, o ferreiro", "t": "A Lâmina Ancestral. Não há metal no mundo que eu saiba trabalhar melhor que isso."}])
+		say([{"n": "Ferro, o ferreiro", "t": "Sua têmpera já é Ancestral. Mas ainda reforjo peças.", "ch": [
+			{"l": "Reforjar a arma equipada (%d Pó)" % _reforge_cost(), "f": _reforge},
+			{"l": "Transmutar 40 Pó em um item raro", "f": _transmute},
+			{"l": "Agora não", "f": _nothing},
+		]}])
 		return
 	var nxt: Dictionary = Game.WEAPON_TIERS[t + 1]
-	say([{"n": "Ferro, o ferreiro", "t": "Sua arma hoje é uma %s. Posso forjar uma %s por %d de ouro. Serve para qualquer vocação." % [Game.WEAPON_TIERS[t]["name"], nxt["name"], nxt["cost"]], "ch": [
-		{"l": "Forjar (%d ouro)" % nxt["cost"], "f": _forge},
+	say([{"n": "Ferro, o ferreiro", "t": "Sua têmpera hoje é %s. Posso subir para %s por %d de ouro, e isso fortalece qualquer arma que você usar. Também reforjo peças." % [Game.WEAPON_TIERS[t]["name"], nxt["name"], nxt["cost"]], "ch": [
+		{"l": "Temperar (%d ouro)" % nxt["cost"], "f": _forge},
+		{"l": "Reforjar a arma equipada (%d Pó)" % _reforge_cost(), "f": _reforge},
+		{"l": "Transmutar 40 Pó em um item raro", "f": _transmute},
 		{"l": "Agora não", "f": _nothing},
 	]}])
 
@@ -196,3 +206,134 @@ static func _forge() -> void:
 	Sfx.play("level")
 	main.shake(0.2)
 	say([{"n": "Ferro, o ferreiro", "t": "Pronto! A %s está quente ainda. Cuidado com os dedos." % Game.WEAPON_TIERS[Game.weapon_tier]["name"]}])
+
+
+
+static func _sell_junk() -> void:
+	var got := 0
+	for i in range(Game.inventory.size() - 1, -1, -1):
+		if int(Game.inventory[i]["rarity"]) <= 1:
+			got += Items.sell_value(Game.inventory[i])
+			Game.inventory.remove_at(i)
+	Game.gold += got
+	Game.save_game()
+	if got > 0:
+		Sfx.play("coin")
+	say([{"n": "Borin", "t": "Hmm, dá para derreter e fazer canecas. Aqui, %d de ouro." % got if got > 0 else "Você não tem nada comum ou mágico na bolsa, amigo."}])
+
+
+static func _reforge_cost() -> int:
+	var w = Game.equipment.get("weapon")
+	return 10 if w == null else 8 + int(w["rarity"]) * 10
+
+
+static func _reforge() -> void:
+	var w = Game.equipment.get("weapon")
+	if w == null:
+		say([{"n": "Ferro, o ferreiro", "t": "Você nem está com uma arma na mão!"}])
+		return
+	var cost := _reforge_cost()
+	if Game.dust < cost:
+		say([{"n": "Ferro, o ferreiro", "t": "Preciso de %d Pó de Mana. Desmonte itens no inventário (I) para conseguir." % cost}])
+		return
+	Game.dust -= cost
+	var fresh = Items.generate(max(int(w["ilvl"]), Game.lvl), int(w["rarity"]) if int(w["rarity"]) < 4 else 3, "weapon", w.get("legend", ""))
+	Game.equipment["weapon"] = fresh
+	Game.recalc()
+	Game.save_game()
+	Sfx.play("level")
+	main.shake(0.2)
+	say([{"n": "Ferro, o ferreiro", "t": "Pronto! Nasceu %s." % fresh["name"]}])
+
+
+static func _transmute() -> void:
+	if Game.dust < 40:
+		say([{"n": "Ferro, o ferreiro", "t": "Transmutar pede 40 Pó de Mana."}])
+		return
+	if Game.inventory.size() >= Game.INV_SIZE:
+		say([{"n": "Ferro, o ferreiro", "t": "Sua bolsa está cheia."}])
+		return
+	Game.dust -= 40
+	var it = Items.generate(Game.lvl, 3 if randf() < 0.08 else 2)
+	Game.add_item(it)
+	Game.save_game()
+	Sfx.play("legendary" if int(it["rarity"]) >= 3 else "rare_drop")
+	say([{"n": "Ferro, o ferreiro", "t": "Do pó ao metal: %s. Está na sua bolsa." % it["name"]}])
+
+
+# ---------------------------------------------------------------- Nix's gamble
+
+static func gamble() -> void:
+	var cost := _gamble_cost()
+	var ch := []
+	for slot in Items.DROP_SLOTS:
+		ch.append({"l": "%s (%d Pó)" % [Items.SLOT_NAMES[slot], cost], "f": Callable(Story, "_gamble").bind(slot)})
+	ch.append({"l": "Agora não", "f": _nothing})
+	say([{"n": "Nix", "t": "Quer brincar de sorte? Me dê Pó de Mana e eu sussurro um item para você. Pode vir qualquer coisa... até um lendário!", "ch": ch}])
+
+
+static func _gamble_cost() -> int:
+	return 15 + Game.lvl
+
+
+static func _gamble(slot: String) -> void:
+	var cost := _gamble_cost()
+	if Game.dust < cost:
+		say([{"n": "Nix", "t": "Faltam %d de Pó. Desmonte itens no inventário (I) e volte!" % (cost - Game.dust)}])
+		return
+	if Game.inventory.size() >= Game.INV_SIZE:
+		say([{"n": "Nix", "t": "Sua bolsa não aguenta nem mais uma pena!"}])
+		return
+	Game.dust -= cost
+	var r := Items.roll_rarity(Game.magic_find() + 2.5)
+	r = max(r, 1)
+	var it := Items.generate(Game.lvl, r, slot)
+	Game.add_item(it)
+	Game.save_game()
+	Sfx.play("legendary" if r >= 3 else ("rare_drop" if r == 2 else "pickup"))
+	main.ui.loot_toast(it)
+	say([{"n": "Nix", "t": "Pluft! %s. Está na sua bolsa." % it["name"]}], Callable(Story, "gamble"))
+
+
+# ---------------------------------------------------------------- torment stone
+
+static func torment_stone() -> void:
+	var ch := []
+	for i in Game.TORMENT.size():
+		var need: int = [1, 5, 12, 20, 28, 36, 44, 52, 60, 68][i]
+		if Game.lvl < need:
+			ch.append({"l": "%s  (nível %d)" % [Game.TORMENT[i]["name"], need], "f": Callable(Story, "_torment_locked").bind(need)})
+		else:
+			var tag = "  ◆ atual" if i == Game.torment else ""
+			ch.append({"l": Game.TORMENT[i]["name"] + tag, "f": Callable(Story, "_set_torment").bind(i)})
+	ch.append({"l": "Voltar", "f": _nothing})
+	say([{"n": "Pedra do Tormento", "t": "Quanto mais escura a pedra, mais fortes os monstros, e mais valiosos os tesouros que eles carregam.", "ch": ch}])
+
+
+static func _torment_locked(need: int) -> void:
+	say([{"n": "Pedra do Tormento", "t": "A pedra não responde. Volte no nível %d." % need}])
+
+
+static func _set_torment(i: int) -> void:
+	Game.torment = i
+	Game.save_game()
+	Sfx.play("roar" if i >= 4 else "select")
+	var tm: Dictionary = Game.TORMENT[i]
+	say([{"n": "Pedra do Tormento", "t": "%s. Monstros com %d%% de vida e %d%% de dano. Experiência +%d%%, e o loot fica muito melhor." % [tm["name"], tm["hp"] * 100, tm["dmg"] * 100, tm["xp"] * 100]}])
+
+
+
+# ---------------------------------------------------------------- rifts
+
+static func obelisk() -> void:
+	var top := Game.best_rift + 1
+	var ch := []
+	for lv in [top, top - 1, top - 3, top - 6, top - 10, 1]:
+		if lv >= 1 and not ch.any(func(c): return c["lv"] == lv):
+			ch.append({"lv": lv, "l": "Fenda nível %d%s" % [lv, "  ◆ nova" if lv == top else ""], "f": Callable(Story, "_open_rift").bind(lv)})
+	ch.append({"l": "Voltar", "f": _nothing})
+	say([{"n": "Obelisco das Fendas", "t": "Rachaduras de mana se abrem na pedra. Encha a barra de progresso, derrote o Guardião em 5 minutos e o próximo nível desperta. Seu recorde: nível %d." % Game.best_rift, "ch": ch}])
+
+
+static func _open_rift(lv: int) -> void:
+	main.start_rift(lv)

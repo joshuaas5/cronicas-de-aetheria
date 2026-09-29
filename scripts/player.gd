@@ -4,6 +4,7 @@ extends CharacterBody3D
 ## Mana Tree skill.
 
 signal died
+signal swung(big: bool)
 
 var model: Node3D
 var ap: AnimationPlayer
@@ -23,6 +24,12 @@ var dodge_dir := Vector3.ZERO
 var knock := Vector3.ZERO
 var cast_done := false
 var phoenix_used := false
+var fp := false
+var god := false
+var fp_yaw := 0.0
+var stun_t := 0.0
+var _hit_counter := 0
+var _trail_cd := 0.0
 var _anim := ""
 var _dash_hits := []
 
@@ -43,13 +50,14 @@ func _ready() -> void:
 
 
 func _build_model() -> void:
-	var yaw := model.rotation.y if model else 0.0
+	var yaw = model.rotation.y if model else 0.0
 	if model:
 		model.queue_free()
 	var c := Game.class_data()
 	model = Chars.instance(c["model"], c["keep"])
 	add_child(model)
 	model.rotation.y = yaw
+	model.visible = not fp
 	ap = model.find_children("*", "AnimationPlayer", true, false)[0]
 	for a in ["Idle", "Running_A", "Walking_A", "Cheer", "Spellcasting", "2H_Melee_Idle"]:
 		if ap.has_animation(a):
@@ -98,12 +106,26 @@ func _physics_process(dt: float) -> void:
 	state_t += dt
 	var c := Game.class_data()
 	Game.mp = min(Game.max_mp, Game.mp + dt * 1.3 * (1.5 if Game.has_skill("m_flow") else 1.0))
-	if Game.has_skill("v_regen") and state != "dead":
-		Game.hp = min(Game.max_hp, Game.hp + dt * (0.6 + Game.max_hp * 0.004))
+	if state != "dead":
+		var regen = Game.stat("regen") + ((0.6 + Game.max_hp * 0.004) if Game.has_skill("v_regen") else 0.0)
+		Game.hp = min(Game.max_hp, Game.hp + dt * regen)
 	knock = knock.lerp(Vector3.ZERO, 1.0 - exp(-dt * 8.0))
 	var input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var move := Vector3(input.x, 0, input.y)
+	if fp:
+		var fwd := Vector3(-sin(fp_yaw), 0, -cos(fp_yaw))
+		var right := Vector3(cos(fp_yaw), 0, -sin(fp_yaw))
+		move = right * input.x + fwd * -input.y
+		face(fwd)
 	var vel := Vector3.ZERO
+	if stun_t > 0.0 and state != "dead":
+		stun_t -= dt
+		if stun_t <= 0.0:
+			ap.speed_scale = 1.0
+		velocity = knock
+		move_and_slide()
+		global_position.y = 0
+		return
 	if state == "dead":
 		velocity = knock
 		move_and_slide()
@@ -118,9 +140,10 @@ func _physics_process(dt: float) -> void:
 	match state:
 		"idle", "move":
 			if move.length() > 0.1:
-				vel = move * c["speed"]
-				face(move)
-				_play("Running_A", 0.12, 1.1 * c["speed"] / 5.4)
+				vel = move * c["speed"] * Game.move_speed()
+				if not fp:
+					face(move)
+				_play("Running_A", 0.12, 1.1 * c["speed"] * Game.move_speed() / 5.4)
 				state = "move"
 			else:
 				_play("Idle", 0.2)
@@ -158,6 +181,13 @@ func _physics_process(dt: float) -> void:
 		"dodge":
 			var k := state_t / state_len
 			vel = dodge_dir * 11.0 * (1.0 - k * 0.8)
+			if Game.legend("trail"):
+				_trail_cd -= dt
+				if _trail_cd <= 0.0:
+					_trail_cd = 0.07
+					var h := Hazard.new().setup("fire", "player", 1.1, Game.mag * 0.4, 3.0)
+					get_parent().add_child(h)
+					h.global_position = global_position
 			if randf() < 0.5:
 				Fx.burst(get_parent(), global_position + Vector3(0, 0.1, 0), Color(0.75, 0.68, 0.55, 0.5), 2, 1.0, 0.6, 0.4, 0.5, false)
 			if Game.has_skill("s_dash") and Input.is_action_just_pressed("attack"):
@@ -192,7 +222,7 @@ func _handle_actions(move: Vector3) -> void:
 	elif Input.is_action_just_pressed("dodge") and dodge_cd <= 0.0:
 		dodge_dir = move.normalized() if move.length() > 0.1 else facing
 		face(dodge_dir)
-		dodge_cd = Game.class_data()["dodge_cd"]
+		dodge_cd = 0.12 if Game.legend("hermes") else Game.class_data()["dodge_cd"]
 		inv = 0.45
 		var n := "Dodge_Forward"
 		_set_state("dodge", _anim_len(n, 1.6))
@@ -242,17 +272,37 @@ func _start_attack() -> void:
 	var n: String = c["attacks"][combo - 1]
 	if combo == 3 and Game.has_skill("s_spin"):
 		n = "2H_Melee_Attack_Spin"
-	var spd: float = c["attack_speed"] * (1.0 if combo < 3 else 0.85)
+	var spd: float = c["attack_speed"] * (1.0 if combo < 3 else 0.85) * Game.attack_speed()
 	_set_state("attack", _anim_len(n, spd))
 	_play(n, 0.06, spd)
 	hit_done = false
 	queued = false
 	Sfx.play("swing")
+	swung.emit(combo >= 3)
 
 
-func _roll_damage(mult: float) -> Array:
-	var crit := randf() < Game.crit_chance()
-	return [Game.atk * randf_range(0.9, 1.1) * mult * (2.0 if crit else 1.0), crit]
+## Every point of player damage goes through here: elements, elite bonus, crits,
+## life steal and the legendary powers that react to hits.
+func deal(target: Node, base: float, push: Vector3, kind: String, can_crit := true) -> float:
+	if target == null or not is_instance_valid(target) or not target.is_alive():
+		return 0.0
+	var dmg := base * Game.element_mult(kind)
+	var is_elite: bool = target.get("rank") in ["champion", "rare", "boss"] or target is Boss
+	if is_elite:
+		dmg *= 1.0 + Game.stat("elite") / 100.0 + (0.5 if Game.legend("crown") else 0.0)
+	var crit := can_crit and randf() < Game.crit_chance()
+	if crit:
+		dmg *= Game.crit_mult()
+	target.take_damage(dmg, push, "crit" if crit else kind)
+	if Game.legend("twin") and kind == "sword" and is_instance_valid(target) and target.is_alive():
+		target.take_damage(dmg * 0.6, Vector3.ZERO, "sword")
+		dmg *= 1.6
+	var heal := dmg * Game.leech()
+	if crit and Game.legend("hunger"):
+		heal += Game.max_hp * 0.03
+	if heal > 0.0:
+		Game.hp = min(Game.max_hp, Game.hp + heal)
+	return dmg
 
 
 func _resolve_hit() -> void:
@@ -272,32 +322,49 @@ func _resolve_hit() -> void:
 		reach += 0.4
 	else:
 		Fx.slash(get_parent(), global_position + Vector3(0, 1.0, 0) + facing * 0.3, yaw, Color(1, 0.95, 0.8), big, combo == 2)
-	var push := 9.0 if big else 5.0
+	var push = 9.0 if big else 5.0
 	if combo == 4:
 		push = 16.0
+	var area := 1.0 + Game.stat("area") / 100.0
+	reach *= sqrt(area)
 	var hit_any := false
-	var any_crit := false
+	var cone = 0.1 if not fp else 0.35
 	for e in get_tree().get_nodes_in_group("enemies"):
 		if not e.is_alive():
 			continue
 		var d: Vector3 = e.global_position - global_position
 		d.y = 0
-		if d.length() < reach + e.radius and (spin or d.length() < 0.8 or d.normalized().dot(facing) > 0.1):
-			var r := _roll_damage(mult)
-			var dir := d.normalized() if spin else facing
-			e.take_damage(r[0], dir * push, "crit" if r[1] else "sword")
-			any_crit = any_crit or r[1]
+		if d.length() < reach + e.radius and (spin or d.length() < 0.8 or d.normalized().dot(facing) > cone):
+			var dir = d.normalized() if spin else facing
+			deal(e, Game.atk * randf_range(0.9, 1.1) * mult, dir * push, "sword")
 			hit_any = true
 	var tip := global_position + facing * 1.3 + Vector3(0, 1.0, 0)
 	for b in get_tree().get_nodes_in_group("boss"):
 		if b.can_be_hit() and b.hit_test(global_position if spin else tip, reach * (1.0 if spin else 0.6)):
-			var r := _roll_damage(mult)
-			b.take_damage(r[0], Vector3.ZERO, "crit" if r[1] else "sword")
-			any_crit = any_crit or r[1]
+			deal(b, Game.atk * randf_range(0.9, 1.1) * mult, Vector3.ZERO, "sword")
 			hit_any = true
+	if combo == 3 and Game.legend("quake"):
+		_shockwave()
+	if hit_any:
+		_hit_counter += 1
+		if Game.legend("thunder") and _hit_counter % 5 == 0:
+			_lightning(global_position + Vector3(0, 1.2, 0) + facing * 0.6)
 	if hit_any and main:
-		main.hitstop(0.12 if any_crit else (0.06 if not big else 0.1))
-		main.shake(0.35 if any_crit else (0.15 if not big else 0.3))
+		main.hitstop(0.06 if not big else 0.1)
+		main.shake(0.15 if not big else 0.3)
+
+
+func _shockwave() -> void:
+	var center := global_position + facing * 1.5
+	Fx.ring(get_parent(), center, 4.5, Color(2.4, 1.6, 0.8, 1.0), 0.35)
+	Fx.burst(get_parent(), center, Color(0.55, 0.45, 0.3, 0.9), 60, 8.0, 0.8, 0.35, -10.0, false, 70.0)
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if e.is_alive() and e.global_position.distance_to(center) < 4.5:
+			var d: Vector3 = e.global_position - center
+			d.y = 0
+			deal(e, Game.atk * 1.5, d.normalized() * 10.0, "sword")
+	if main:
+		main.shake(0.5)
 
 
 func _start_dash_strike() -> void:
@@ -318,15 +385,14 @@ func _dash_damage() -> void:
 		d.y = 0
 		if d.length() < 1.6 + e.radius:
 			_dash_hits.append(e)
-			var r := _roll_damage(2.0)
-			e.take_damage(r[0], facing * 10.0, "crit" if r[1] else "sword")
+			deal(e, Game.atk * 2.0, facing * 10.0, "sword")
 			if main:
 				main.hitstop(0.07)
 				main.shake(0.25)
 	for b in get_tree().get_nodes_in_group("boss"):
 		if not _dash_hits.has(b) and b.can_be_hit() and b.hit_test(global_position + Vector3(0, 1, 0), 1.2):
 			_dash_hits.append(b)
-			b.take_damage(_roll_damage(2.0)[0], Vector3.ZERO, "sword")
+			deal(b, Game.atk * 2.0, Vector3.ZERO, "sword")
 
 
 # ---------------------------------------------------------------- magic
@@ -338,7 +404,7 @@ func _start_cast() -> void:
 		Fx.number(get_parent(), global_position + Vector3(0, 2.2, 0), "Sem mana", Color(0.6, 0.75, 1.0), 44)
 		Sfx.play("blip")
 		return
-	if Game.has_skill("m_echo") and randf() < 0.25:
+	if (Game.has_skill("m_echo") and randf() < 0.25) or (Game.legend("echo") and randf() < 0.5):
 		Fx.number(get_parent(), global_position + Vector3(0, 2.4, 0), "Eco!", Color(0.8, 0.7, 1.0), 44)
 	else:
 		Game.mp -= cost
@@ -346,7 +412,7 @@ func _start_cast() -> void:
 	if t:
 		face(t.global_position - global_position)
 	var n := "Spellcast_Shoot"
-	var spd := 1.5 * (1.3 if Game.cls == "mage" else 1.0)
+	var spd = 1.5 * (1.3 if Game.cls == "mage" else 1.0)
 	_set_state("cast", _anim_len(n, spd))
 	_play(n, 0.08, spd)
 	cast_done = false
@@ -383,7 +449,26 @@ func _release_spell() -> void:
 			Sfx.play("heal")
 		"bolt":
 			_lightning(origin)
+	if Game.legend("stars") and sp != "heal":
+		var t := _nearest_target(16.0, 0.3)
+		_meteors(t.global_position if t else global_position + facing * 7.0)
 	Game.stats_changed.emit()
+
+
+func _meteors(center: Vector3) -> void:
+	for i in 3:
+		var p := center + Vector3(randf_range(-2.5, 2.5), 0, randf_range(-2.5, 2.5))
+		p.y = 0
+		var delay := 0.55 + i * 0.22
+		var h := Hazard.new().setup("blast", "player", 2.2, Game.mag * 1.2, 0.0, delay)
+		get_parent().add_child(h)
+		h.global_position = p
+		var rock := Fx.glow_sphere(0.35, Color(1.0, 0.5, 0.2), 4.0)
+		get_parent().add_child(rock)
+		rock.global_position = p + Vector3(3, 14, -3)
+		var tw := rock.create_tween()
+		tw.tween_property(rock, "global_position", p, delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_callback(rock.queue_free)
 
 
 ## Chain lightning: jumps between up to four enemies.
@@ -392,16 +477,17 @@ func _lightning(origin: Vector3) -> void:
 	var hit := []
 	var from := origin
 	var dmg := Game.mag * 1.35
+	var jumps = 9 if Game.legend("storm") else 4
 	var first := _nearest_target(13.0, 0.3)
 	var cur: Node3D = first
 	var pts := [origin]
-	for i in 4:
+	for i in jumps:
 		if cur == null:
 			break
 		hit.append(cur)
 		var to: Vector3 = cur.global_position + Vector3(0, 1.1, 0)
 		pts.append(to)
-		cur.take_damage(dmg, (to - from).normalized() * 3.0, "bolt")
+		deal(cur, dmg, (to - from).normalized() * 3.0, "bolt")
 		if cur.has_method("apply_stun"):
 			cur.apply_stun(0.5)
 		Fx.burst(parent, to, Color(2.2, 2.2, 3.2), 18, 4.0, 0.3, 0.1, 0.0)
@@ -434,7 +520,7 @@ func _drink() -> void:
 		Game.toast.emit("A vida já está cheia")
 		return
 	Game.potions -= 1
-	var amt := 40.0 * (1.6 if Game.has_skill("v_potion") else 1.0)
+	var amt = 40.0 * (1.6 if Game.has_skill("v_potion") else 1.0)
 	Game.hp = min(Game.max_hp, Game.hp + amt)
 	Fx.number(get_parent(), global_position + Vector3(0, 2.2, 0), "+%d" % amt, Color(1.0, 0.55, 0.65))
 	Fx.burst(get_parent(), global_position + Vector3(0, 1.0, 0), Color(2.4, 0.8, 1.2), 30, 2.0, 0.9, 0.14, 1.5)
@@ -449,8 +535,12 @@ func _drink() -> void:
 
 ## Returns true if the hit landed. `attacker` receives thorn damage when set.
 func hurt(dmg: float, from: Vector3, attacker: Node = null) -> bool:
-	if inv > 0.0 or state == "dead" or state == "dodge" or state == "dash_strike" or frozen:
+	if god or inv > 0.0 or state == "dead" or state == "dodge" or state == "dash_strike" or frozen:
 		return false
+	var mlvl: int = Game.lvl
+	if attacker != null and is_instance_valid(attacker) and attacker.get("mlvl") != null:
+		mlvl = attacker.mlvl
+	dmg *= 1.0 - Game.damage_reduction(mlvl)
 	Game.hp -= dmg
 	inv = 1.0
 	var d := global_position - from
@@ -459,8 +549,11 @@ func hurt(dmg: float, from: Vector3, attacker: Node = null) -> bool:
 	Fx.number(get_parent(), global_position + Vector3(0, 2.0, 0), "%d" % dmg, Color(1.0, 0.4, 0.3))
 	Fx.burst(get_parent(), global_position + Vector3(0, 1.0, 0), Color(2.5, 0.6, 0.4), 16, 3.0, 0.4, 0.1)
 	Sfx.play("hurt")
-	if Game.has_skill("v_thorns") and attacker != null and is_instance_valid(attacker) and attacker.has_method("take_damage") and attacker.is_alive():
-		attacker.take_damage(dmg * 0.3 + Game.atk * 0.3, -d.normalized() * 4.0, "thorns")
+	var thorns = Game.stat("thorns") + ((dmg * 0.3 + Game.atk * 0.3) if Game.has_skill("v_thorns") else 0.0)
+	if Game.legend("brambles"):
+		thorns *= 3.0
+	if thorns > 0.0 and attacker != null and is_instance_valid(attacker) and attacker.has_method("take_damage") and attacker.is_alive():
+		attacker.take_damage(thorns, -d.normalized() * 4.0, "thorns")
 	if main:
 		main.shake(0.4)
 		main.hitstop(0.08)
@@ -486,9 +579,19 @@ func hurt(dmg: float, from: Vector3, attacker: Node = null) -> bool:
 	return true
 
 
+func stun(t: float) -> void:
+	if state == "dead" or inv > 1.5:
+		return
+	stun_t = t
+	ap.speed_scale = 0.0
+	Fx.burst(get_parent(), global_position + Vector3(0, 1.2, 0), Color(1.5, 2.2, 3.0), 30, 2.0, 1.0, 0.18, -2.0)
+
+
 func revive() -> void:
 	_set_state("idle")
 	inv = 1.5
+	stun_t = 0.0
+	ap.speed_scale = 1.0
 	phoenix_used = false
 	_anim = ""
 	_play("Idle")

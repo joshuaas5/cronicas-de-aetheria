@@ -147,6 +147,8 @@ func build() -> void:
 	sign_pt.position = Vector3(26, 0, -0.5)
 	add_child(sign_pt)
 	_altar(Vector3(4.2, 0, 4.2))
+	_torment_stone(Vector3(-6.5, 0, 9.0))
+	_obelisk(Vector3(13.0, 0, 9.5))
 	if Game.lands.has("forest"):
 		_forge(Vector3(19.0, 0, 7.0))
 	_butterflies()
@@ -181,7 +183,7 @@ func _trees() -> void:
 		Env.tree(self, Vector3(p.x, height_at(p.x, p.z), p.z), batch_leaves, {"height": randf_range(11, 15), "radius": randf_range(0.5, 0.7), "crown": randf_range(4.2, 5.5), "cards": 480, "card_size": 1.25})
 	for i in 40:
 		var bx := randf_range(bounds.position.x - 6, bounds.end.x + 6)
-		var bz := randf_range(-16, -6.5) if i % 3 != 0 else bounds.end.y + randf_range(0.5, 3.0)
+		var bz = randf_range(-16, -6.5) if i % 3 != 0 else bounds.end.y + randf_range(0.5, 3.0)
 		if Rect2(1, -15, 15, 10).has_point(Vector2(bx, bz)) or Rect2(-17.5, -14, 9.5, 8.5).has_point(Vector2(bx, bz)):
 			continue
 		Env.bush(Vector3(bx, height_at(bx, bz), bz), batch_bush, randf_range(0.8, 1.6), 45)
@@ -195,7 +197,7 @@ func _trees() -> void:
 
 func _butterflies() -> void:
 	for i in 6:
-		var p := Fx.emitter(self, [Color(2.4, 1.2, 1.8), Color(2.4, 2.2, 0.8), Color(1.2, 1.8, 2.6)][i % 3], 3, 3.0, 0.14, 0.8, 0.05, Vector3(6, 1.2, 4))
+		var p = Fx.emitter(self, [Color(2.4, 1.2, 1.8), Color(2.4, 2.2, 0.8), Color(1.2, 1.8, 2.6)][i % 3], 3, 3.0, 0.14, 0.8, 0.05, Vector3(6, 1.2, 4))
 		p.position = Vector3(randf_range(-24, 24), 1.2, randf_range(-3, 11))
 
 
@@ -256,3 +258,54 @@ func _forge(pos: Vector3) -> void:
 	var smith := Npc.new().setup("Ferro, o ferreiro", "Knight", Story.smith, -0.4, ["2H_Sword"])
 	smith.position = pos + Vector3(0.6, 0, 1.4)
 	add_child(smith)
+
+
+
+func _torment_stone(pos: Vector3) -> void:
+	var stone := Env.pbr("rock_wall_08", 0.8, Color(0.35, 0.3, 0.4), true)
+	var mi := Build.cyl(self, pos + Vector3(0, 1.3, 0), 0.35, 0.75, 2.6, stone, 7)
+	mi.rotation.y = 0.3
+	var rune := Fx.glow_sphere(0.18, Color(1.0, 0.25, 0.3), 5.0)
+	rune.position = pos + Vector3(0, 1.8, 0.45)
+	add_child(rune)
+	var l := OmniLight3D.new()
+	l.light_color = Color(1.0, 0.3, 0.3)
+	l.light_energy = 1.4
+	l.omni_range = 4.0
+	l.position = pos + Vector3(0, 1.8, 0.8)
+	add_child(l)
+	Fx.emitter(self, Color(2.4, 0.5, 0.6), 24, 2.0, 0.08, 0.3, 0.5, Vector3(0.5, 1.0, 0.5)).position = pos + Vector3(0, 1.2, 0)
+	Env.pillar(self, pos, 0.8, 3.0)
+	var pt := InteractPoint.new().setup("Pedra do Tormento", Story.torment_stone, 2.4, 3.2)
+	pt.position = pos
+	add_child(pt)
+
+
+
+func _obelisk(pos: Vector3) -> void:
+	var stone := Env.pbr("rock_wall_08", 0.8, Color(0.3, 0.28, 0.4), true)
+	Build.cyl(self, pos + Vector3(0, 2.0, 0), 0.25, 0.6, 4.0, stone, 4).rotation.y = PI * 0.25
+	for k in 3:
+		var shard := Fx.glow_sphere(0.14, Color(0.7, 0.4, 1.0), 5.0)
+		shard.position = pos + Vector3(0, 1.2 + k * 1.0, 0.45)
+		add_child(shard)
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 1.3
+	tm.outer_radius = 1.45
+	ring.mesh = tm
+	ring.material_override = Env.emissive(Color(0.6, 0.35, 1.0), 2.5)
+	ring.position = pos + Vector3(0, 0.05, 0)
+	ring.scale = Vector3(1, 0.1, 1)
+	add_child(ring)
+	var l := OmniLight3D.new()
+	l.light_color = Color(0.7, 0.45, 1.0)
+	l.light_energy = 2.0
+	l.omni_range = 5.0
+	l.position = pos + Vector3(0, 2.5, 0.8)
+	add_child(l)
+	Fx.emitter(self, Color(1.6, 0.8, 3.0), 40, 2.5, 0.08, 0.4, 0.8, Vector3(1.0, 0.2, 1.0)).position = pos + Vector3(0, 0.3, 0)
+	Env.pillar(self, pos, 0.8, 4.0)
+	var pt := InteractPoint.new().setup("Obelisco das Fendas", Story.obelisk, 2.6, 4.4)
+	pt.position = pos
+	add_child(pt)

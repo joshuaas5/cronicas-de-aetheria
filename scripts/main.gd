@@ -12,6 +12,7 @@ const LEVELS := {
 	"forest2": "res://scripts/levels/forest.gd",
 	"sanctuary": "res://scripts/levels/sanctuary.gd",
 	"map": "res://scripts/levels/worldmap.gd",
+	"rift": "res://scripts/levels/rift.gd",
 }
 
 var ui: GameUI
@@ -24,6 +25,13 @@ var trauma := 0.0
 var exit_cd := 0.0
 var cam_focus := Vector3.ZERO
 var title_t := 0.0
+var fp := false
+var fp_pitch := -0.1
+var viewmodel: Node3D
+var vm_swing := 0.0
+var streak := 0
+var streak_t := 0.0
+var streak_xp := 0
 var args := {}
 
 
@@ -121,6 +129,22 @@ func _test_boot() -> void:
 	Game.recalc()
 	Game.hp = Game.max_hp
 	Game.mp = Game.max_mp
+	if args.has("savetest"):
+		for i in 12:
+			Game.add_item(Items.generate(10, i % 5))
+		Game.equip(3)
+		Game.dust = 42
+		Game.torment = 2
+		Game.best_rift = 7
+		var before := [Game.inventory.size(), Game.equipment.size(), int(Game.atk), int(Game.max_hp)]
+		Game.save_game()
+		Game.new_game()
+		var ok := Game.load_game()
+		print("SAVETEST ok=%s before=%s after=%s dust=%d torment=%d best=%d" % [ok, before, [Game.inventory.size(), Game.equipment.size(), int(Game.atk), int(Game.max_hp)], Game.dust, Game.torment, Game.best_rift])
+		get_tree().quit()
+		return
+	if args.has("rift"):
+		Game.rift_level = int(args["rift"])
 	_load_level(args["level"], args.get("spawn", ""), true)
 	state = "map" if args["level"] == "map" else "play"
 	ui.mode = "map" if state == "map" else "play"
@@ -136,6 +160,26 @@ func _test_boot() -> void:
 		Game.essence = 30
 		Game.recalc()
 		Game.hp = Game.max_hp
+	if args.has("loot"):
+		for i in 30:
+			Game.add_item(Items.generate(Game.lvl + 8, [0, 1, 1, 2, 2, 2, 3, 3][i % 8]))
+		Game.equip(6)
+		Game.equip(3)
+		Game.dust = 57
+	if args.has("inv"):
+		_open_inventory()
+		ui.inv_sel = 14
+	if args.has("fp"):
+		set_first_person(true)
+	if args.has("god"):
+		player.god = true
+	if args.has("elites"):
+		var pp := player.global_position
+		_spawn("warrior", pp + Vector3(4, 0, -3), "rare", Game.lvl, ["molten", "shielded"])
+		for i in 3:
+			_spawn("minion", pp + Vector3(6 + i, 0, -2), "champion", Game.lvl, ["fast"])
+		for i in 4:
+			drop_item(pp + Vector3(-3 + i * 2, 0, 2), Game.lvl, 5.0, [1, 2, 3, 4][i])
 	if args.has("tree"):
 		Game.essence = 5
 		Game.skills = ["s_edge", "s_crit", "m_flow", "v_root", "v_potion"]
@@ -145,9 +189,11 @@ func _test_boot() -> void:
 		_take_shot()
 	elif args.has("seconds"):
 		await get_tree().create_timer(float(args["seconds"])).timeout
+		if level and level.id == "rift":
+			print("RIFT progress=%.0f guardian=%s finished=%s time=%.0f ghp=%s atk=%d" % [level.rift_progress, level.guardian_spawned, level.finished, level.time_left, str(level.guardian.hp) + "/" + str(level.guardian.max_hp) if is_instance_valid(level.guardian) else "-", Game.atk])
 		for b in get_tree().get_nodes_in_group("boss"):
 			print("BOSS hp=", b.hp, " state=", b.state, " pos=", b.global_position, " player=", player.global_position)
-		print("AUTOPLAY END level=%s hp=%d lvl=%d xp=%d gold=%d enemies=%d flags=%s arts=%s lands=%s cls=%s classes=%s tier=%d skills=%d" % [Game.current_level, Game.hp, Game.lvl, Game.xp, Game.gold, get_tree().get_nodes_in_group("enemies").size(), str(Game.flags), str(Game.arts), str(Game.lands), Game.cls, str(Game.classes), Game.weapon_tier, Game.skills.size()])
+		print("AUTOPLAY END level=%s hp=%d lvl=%d xp=%d gold=%d enemies=%d flags=%s arts=%s lands=%s cls=%s classes=%s tier=%d skills=%d rift_best=%d inv=%s" % [Game.current_level, Game.hp, Game.lvl, Game.xp, Game.gold, get_tree().get_nodes_in_group("enemies").size(), str(Game.flags), str(Game.arts), str(Game.lands), Game.cls, str(Game.classes), Game.weapon_tier, Game.skills.size(), Game.best_rift, str(Game.inventory.map(func(it): return int(it["rarity"])))])
 		get_tree().quit()
 
 
@@ -199,6 +245,8 @@ func _load_level(id: String, spawn: String, with_player: bool) -> void:
 	if level:
 		level.queue_free()
 		level = null
+	if id != "rift":
+		Game.rift_level = 0
 	var script = load(LEVELS[id])
 	if id == "forest1" or id == "forest2":
 		level = script.new(id == "forest2")
@@ -255,6 +303,13 @@ func _autoplay(dt: float) -> void:
 		return
 	if player.get_parent() == null:
 		return
+	if fmod(title_t, 4.0) < dt:
+		for i in range(Game.inventory.size() - 1, -1, -1):
+			var it: Dictionary = Game.inventory[i]
+			var cur = Game.equipped_for(it)
+			if cur == null or Items.score(it) > Items.score(cur):
+				Game.equip(i)
+				break
 	var targets := get_tree().get_nodes_in_group("enemies") + get_tree().get_nodes_in_group("boss")
 	var best: Node3D = null
 	var bd := 1e9
@@ -342,6 +397,9 @@ func _play_update(dt: float) -> void:
 	if ui.mode == "tree":
 		_tree_update()
 		return
+	if ui.mode == "inv":
+		_inv_update()
+		return
 	if paused:
 		var c := ui.menu_input()
 		if Input.is_action_just_pressed("pause") or c == "resume":
@@ -371,6 +429,25 @@ func _play_update(dt: float) -> void:
 	if Input.is_action_just_pressed("tree"):
 		_open_tree()
 		return
+	if Input.is_action_just_pressed("inventory"):
+		_open_inventory()
+		return
+	if Input.is_action_just_pressed("view"):
+		set_first_person(not fp)
+	if streak_t > 0.0:
+		streak_t -= dt
+		ui.streak = streak
+		if streak_t <= 0.0:
+			if streak >= 5:
+				var bonus := int(streak_xp * 0.05 * streak / 5.0)
+				ui.toast("Massacre x%d  ·  +%d XP" % [streak, bonus])
+				if Game.gain_xp(bonus):
+					_level_up_fx()
+			streak = 0
+			streak_xp = 0
+			ui.streak = 0
+	if fp and viewmodel:
+		vm_swing = max(0.0, vm_swing - dt * 4.0)
 	# interaction prompt
 	var t := _nearest_talkable()
 	ui.prompt = ("Espaço — " + ("Falar com " if t is Npc else "Examinar ") + t.display_name) if t else ""
@@ -436,8 +513,11 @@ func _focus_target() -> Vector3:
 
 
 func _place_camera(dt: float) -> void:
+	if fp and player.get_parent() and state == "play":
+		_place_fp_camera(dt)
+		return
 	var b := level.cam_bounds
-	var f := Vector3(clamp(cam_focus.x, b.position.x, b.end.x), 0, clamp(cam_focus.z, b.position.y, b.end.y))
+	var f: Vector3 = Vector3(clamp(cam_focus.x, b.position.x, b.end.x), 0, clamp(cam_focus.z, b.position.y, b.end.y))
 	if state == "title":
 		f = cam_focus
 	var target := f + Vector3(0, level.cam_look_height, 0)
@@ -478,17 +558,94 @@ func spawn_enemy(type: String, pos: Vector3, elite := false) -> Enemy:
 
 
 func on_enemy_killed(e: Enemy) -> void:
+	Game.kills += 1
 	var t: Dictionary = Enemy.TYPES[e.type]
-	var g: int = randi_range(t["gold"][0], t["gold"][1]) * (2 if e.elite else 1)
-	var coins: int = min(g, 4)
+	var rank_gold: float = {"normal": 1.0, "minion": 1.5, "champion": 4.0, "rare": 7.0, "goblin": 12.0}[e.rank]
+	var g: int = int(randi_range(t["gold"][0], t["gold"][1]) * rank_gold * (1.0 + e.mlvl * 0.15))
+	var coins: int = clamp(g / 6, 1, 14 if e.rank == "goblin" else 5)
 	for i in coins:
 		_drop("coin", e.global_position, int(ceil(float(g) / coins)))
 	if randf() < (0.35 if Game.has_skill("v_potion") else 0.2):
 		_drop("heart", e.global_position)
 	elif randf() < 0.2:
 		_drop("mana", e.global_position)
+	# items
+	var luck := Game.magic_find()
+	var count = 1 if randf() < 0.2 else 0
+	match e.rank:
+		"minion":
+			count = 1 if randf() < 0.35 else 0
+		"champion":
+			count = 1 + (1 if randf() < 0.4 else 0)
+			luck += 1.5
+		"rare":
+			count = 2 + (1 if randf() < 0.5 else 0)
+			luck += 2.5
+		"goblin":
+			count = randi_range(4, 7)
+			luck += 3.0
+	if e.elite and Game.legend("crown"):
+		count += 1
+	for i in count:
+		drop_item(e.global_position, e.mlvl, luck)
+	if Game.legend("corpse"):
+		Fx.burst(level, e.global_position + Vector3(0, 0.8, 0), Color(0.95, 0.92, 0.85), 30, 7.0, 0.6, 0.12, -10.0, false)
+		for o in get_tree().get_nodes_in_group("enemies"):
+			if o.is_alive() and o.global_position.distance_to(e.global_position) < 3.2:
+				player.deal(o, Game.atk * 0.8, (o.global_position - e.global_position).normalized() * 6.0, "sword", false)
+	if level.has_method("on_kill"):
+		level.on_kill(e)
+	# kill streak
+	streak += 1
+	streak_t = 2.2
+	streak_xp += e.xp
 	if Game.gain_xp(e.xp):
 		_level_up_fx()
+
+
+## Drops a random item scaled to `ilvl`.
+func drop_item(pos: Vector3, ilvl: int, luck: float, rarity := -1, slot := "") -> void:
+	var r = rarity if rarity >= 0 else Items.roll_rarity(luck)
+	var it := Items.generate(ilvl, r, slot)
+	var l := Loot.new().setup(it)
+	level.add_child(l)
+	l.global_position = pos + Vector3(0, 1.0, 0)
+
+
+## Spawns a pack at `pos`: plain monsters, a champion pack, or a rare with escorts.
+func spawn_pack(pos: Vector3, mlvl: int, types: Array) -> void:
+	var roll := randf()
+	var tm := float(Game.torment)
+	var champ_chance := 0.14 + tm * 0.02
+	var rare_chance := 0.08 + tm * 0.015
+	var keys := Enemy.AFFIX_NAMES.keys()
+	if roll < rare_chance:
+		keys.shuffle()
+		var aff = keys.slice(0, 2 + (1 if tm >= 3 else 0))
+		_spawn(types[randi() % types.size()], pos, "rare", mlvl, aff)
+		for i in 3:
+			_spawn(types[randi() % types.size()], pos + Vector3(randf_range(-2.5, 2.5), 0, randf_range(-2.5, 2.5)), "minion", mlvl, [])
+	elif roll < rare_chance + champ_chance:
+		keys.shuffle()
+		var aff = keys.slice(0, 1 + (1 if tm >= 2 else 0))
+		var ty: String = types[randi() % types.size()]
+		for i in 3:
+			_spawn(ty, pos + Vector3(randf_range(-2, 2), 0, randf_range(-2, 2)), "champion", mlvl, aff)
+	else:
+		for i in randi_range(3, 5):
+			_spawn(types[randi() % types.size()], pos + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)), "normal", mlvl, [])
+	if randf() < 0.05 + tm * 0.005:
+		_spawn("goblin", pos + Vector3(randf_range(-4, 4), 0, randf_range(-4, 4)), "goblin", mlvl, [])
+
+
+func _spawn(type: String, pos: Vector3, rank: String, mlvl: int, aff: Array) -> Enemy:
+	var b := level.bounds.grow(-1.0)
+	pos.x = clamp(pos.x, b.position.x, b.end.x)
+	pos.z = clamp(pos.z, b.position.y, b.end.y)
+	var e := Enemy.new().setup(type, false, rank, mlvl, aff)
+	level.add_child(e)
+	e.global_position = pos
+	return e
 
 
 func _drop(kind: String, pos: Vector3, value := 1) -> void:
@@ -514,7 +671,12 @@ func on_boss_spawned(b: Boss) -> void:
 func _on_boss_defeated() -> void:
 	ui.boss = null
 	level.exits_locked = false
+	var first_kill: bool = not Game.flags.get("boss_defeated", false)
+	var bpos := Vector3(0, 0, -2.5)
+	for i in 5:
+		drop_item(bpos, Game.monster_level(4), Game.magic_find() + 4.0, 3 if (i == 0 and first_kill) else -1)
 	Game.flags["boss_defeated"] = true
+	Game.flags["boss_torment"] = Game.torment
 	Game.gold += 60
 	Game.essence += 2
 	ui.toast("+2 Essência de Mana")
@@ -572,3 +734,151 @@ func _tree_update() -> void:
 		get_tree().paused = false
 		ui.mode = "play"
 		Sfx.play("blip")
+
+
+
+# ---------------------------------------------------------------- first person
+
+func set_first_person(on: bool) -> void:
+	if level == null or level.id == "map":
+		on = false
+	fp = on
+	player.fp = on
+	player.model.visible = not on
+	ui.fp = on
+	if on:
+		player.fp_yaw = player.model.rotation.y + PI
+		fp_pitch = -0.08
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		camera.attributes = null
+		_make_viewmodel()
+		ui.toast("Primeira pessoa  ·  mouse para olhar  ·  V para voltar")
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		camera.attributes = level.env.get("cam_attr") if level else null
+		if viewmodel:
+			viewmodel.queue_free()
+			viewmodel = null
+		player.model.rotation.y = player.fp_yaw + PI
+
+
+func _make_viewmodel() -> void:
+	if viewmodel:
+		viewmodel.queue_free()
+	var path: String = {"knight": "res://assets/characters/adventurers/sword_1handed.gltf", "rogue": "res://assets/characters/adventurers/dagger.gltf", "barbarian": "res://assets/characters/skeletons/Skeleton_Axe.gltf", "mage": "res://assets/characters/adventurers/staff.gltf"}[Game.cls]
+	viewmodel = Node3D.new()
+	camera.add_child(viewmodel)
+	var w: Node3D = load(path).instantiate()
+	w.rotation_degrees = Vector3(-60, 20, -10)
+	w.scale = Vector3.ONE * 0.55
+	viewmodel.add_child(w)
+	viewmodel.position = Vector3(0.38, -0.42, -0.75)
+	for mi in w.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if not player.swung.is_connected(_on_swing):
+		player.swung.connect(_on_swing)
+
+
+func _on_swing(big: bool) -> void:
+	vm_swing = 1.0 if not big else 1.3
+
+
+func _input(event: InputEvent) -> void:
+	if fp and state == "play" and not paused and ui.mode == "play" and event is InputEventMouseMotion:
+		player.fp_yaw -= event.relative.x * 0.0028
+		fp_pitch = clamp(fp_pitch - event.relative.y * 0.0024, -1.2, 1.0)
+	if ui.mode == "inv" and event is InputEventMouseMotion:
+		ui.inv_hover(ui.canvas.get_local_mouse_position())
+	if ui.mode == "inv" and event is InputEventMouseButton and event.pressed:
+		ui.inv_hover(ui.canvas.get_local_mouse_position())
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			_inv_activate()
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			_inv_salvage()
+
+
+func _place_fp_camera(dt: float) -> void:
+	var rx := Input.get_joy_axis(0, JOY_AXIS_RIGHT_X)
+	var ry := Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y)
+	if abs(rx) > 0.15:
+		player.fp_yaw -= rx * dt * 2.8
+	if abs(ry) > 0.15:
+		fp_pitch = clamp(fp_pitch - ry * dt * 2.2, -1.2, 1.0)
+	trauma = max(0.0, trauma - dt * 1.8)
+	var s := trauma * trauma
+	var t := Time.get_ticks_msec() / 1000.0
+	var bob: float = sin(t * 11.0) * 0.035 * clamp(player.velocity.length() / 5.0, 0.0, 1.0)
+	camera.global_position = player.global_position + Vector3(0, 1.62 + bob, 0) + Vector3(sin(t * 47.0), sin(t * 53.0), 0) * s * 0.12
+	camera.rotation = Vector3(fp_pitch, player.fp_yaw, 0)
+	camera.fov = 78.0
+	if viewmodel:
+		var sw := vm_swing
+		viewmodel.rotation = Vector3(-sw * 1.2, sw * 0.9, sw * 0.6)
+		viewmodel.position = Vector3(0.38 - sw * 0.25, -0.42 + bob * 0.5 + sw * 0.1, -0.75 - sw * 0.2)
+
+
+# ---------------------------------------------------------------- inventory
+
+func _open_inventory() -> void:
+	paused = true
+	get_tree().paused = true
+	ui.mode = "inv"
+	ui.inv_sel = 0
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Sfx.play("select")
+
+
+func _close_inventory() -> void:
+	paused = false
+	get_tree().paused = false
+	ui.mode = "play"
+	if fp:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_make_viewmodel()
+	Game.save_game()
+	Sfx.play("blip")
+
+
+func _inv_update() -> void:
+	for pair in [["move_left", Vector2.LEFT], ["move_right", Vector2.RIGHT], ["move_up", Vector2.UP], ["move_down", Vector2.DOWN]]:
+		if Input.is_action_just_pressed(pair[0]):
+			ui.inv_move(pair[1])
+	if Input.is_action_just_pressed("interact"):
+		_inv_activate()
+	if Input.is_action_just_pressed("salvage"):
+		_inv_salvage()
+	if Input.is_action_just_pressed("salvage_all"):
+		var got := Game.salvage_junk()
+		if got > 0:
+			Sfx.play("coin")
+			ui.toast("Itens comuns e mágicos desmontados  ·  +%d Pó de Mana" % got)
+	if Input.is_action_just_pressed("inventory") or Input.is_action_just_pressed("pause"):
+		_close_inventory()
+
+
+func _inv_activate() -> void:
+	var sel := ui.inv_selected()
+	if sel.is_empty():
+		return
+	if sel["kind"] == "equip":
+		Game.unequip(sel["slot"])
+	else:
+		Game.equip(sel["idx"])
+		Sfx.play("equip")
+		if fp:
+			_make_viewmodel()
+
+
+func _inv_salvage() -> void:
+	var sel := ui.inv_selected()
+	if sel.is_empty() or sel["kind"] != "bag":
+		return
+	var got := Game.salvage(sel["idx"])
+	Sfx.play("coin")
+	ui.toast("+%d Pó de Mana" % got)
+
+
+
+func start_rift(lvl: int) -> void:
+	Game.rift_level = max(1, lvl)
+	go("rift", "default")

@@ -153,15 +153,15 @@ static func number(parent: Node, pos: Vector3, text: String, color: Color, size 
 static func slash(parent: Node, pos: Vector3, yaw: float, color: Color, big := false, flip := false) -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var sweep := 2.2 if big else 1.7
+	var sweep = 2.2 if big else 1.7
 	var r0 := 0.6
-	var r1 := 2.2 if big else 1.8
+	var r1 = 2.2 if big else 1.8
 	var segs := 20
 	for i in segs + 1:
 		var t := float(i) / segs
-		var a := -sweep * 0.5 + sweep * t
-		var alpha := sin(t * PI) * (t if not flip else 1.0 - t) * 1.6
-		var c := Color(color.r, color.g, color.b, clamp(alpha, 0.0, 1.0))
+		var a = -sweep * 0.5 + sweep * t
+		var alpha = sin(t * PI) * (t if not flip else 1.0 - t) * 1.6
+		var c = Color(color.r, color.g, color.b, clamp(alpha, 0.0, 1.0))
 		st.set_color(Color(c.r, c.g, c.b, 0.0))
 		st.add_vertex(Vector3(sin(a) * r0, 0, cos(a) * r0))
 		st.set_color(c)
@@ -254,7 +254,7 @@ static func lightning(parent: Node, pts: Array) -> void:
 		var prev := a
 		for k in range(1, segs + 1):
 			var t := float(k) / segs
-			var p := a.lerp(b, t)
+			var p = a.lerp(b, t)
 			if k < segs:
 				p += Vector3(randf_range(-0.35, 0.35), randf_range(-0.35, 0.35), randf_range(-0.35, 0.35))
 			var side := (p - prev).cross(Vector3.UP).normalized() * 0.07
