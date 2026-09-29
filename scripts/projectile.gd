@@ -97,7 +97,7 @@ func _physics_process(dt: float) -> void:
 				return
 	else:
 		for p in get_tree().get_nodes_in_group("player"):
-			if here.distance_to(Vector2(p.global_position.x, p.global_position.z)) < radius + 0.45 and p.hurt(damage, global_position):
+			if here.distance_to(Vector2(p.global_position.x, p.global_position.z)) < radius + 0.45 and p.hurt(damage, global_position, null):
 				_explode(null)
 				return
 	if life <= 0.0:
@@ -112,6 +112,9 @@ func _hit(target: Node) -> void:
 		target.take_damage(damage, velocity.normalized() * 4.0, kind)
 		if kind == "ice" and target.has_method("apply_slow"):
 			target.apply_slow(2.5)
+			if Game.has_skill("m_frost") and randf() < 0.3 and target.has_method("apply_stun"):
+				target.apply_stun(1.4)
+				Fx.burst(get_parent(), global_position, Color(1.5, 2.2, 3.0), 24, 2.0, 0.8, 0.2, -2.0)
 	_explode(null)
 
 
@@ -126,13 +129,18 @@ func _explode(_direct: Node) -> void:
 		if main:
 			main.shake(0.35)
 		var here := Vector2(global_position.x, global_position.z)
+		var blast := 3.6 if Game.has_skill("m_blaze") else 2.4
+		if blast > 3.0:
+			Fx.burst(parent, global_position, Color(3.0, 1.0, 0.25), 60, 10.0, 0.6, 0.3, -1.0)
 		for e in get_tree().get_nodes_in_group("enemies"):
-			if e.is_alive() and here.distance_to(Vector2(e.global_position.x, e.global_position.z)) < 2.4 + e.radius:
+			if e.is_alive() and here.distance_to(Vector2(e.global_position.x, e.global_position.z)) < blast + e.radius:
 				var d: Vector3 = (e.global_position - global_position)
 				d.y = 0
 				e.take_damage(damage, d.normalized() * 7.0, "fire")
+				if Game.has_skill("m_blaze") and e.has_method("apply_burn"):
+					e.apply_burn(3.0)
 		for b in get_tree().get_nodes_in_group("boss"):
-			if b.can_be_hit() and b.hit_test(global_position, 2.4):
+			if b.can_be_hit() and b.hit_test(global_position, blast):
 				b.take_damage(damage, Vector3.ZERO, "fire")
 	elif kind == "ice":
 		Fx.burst(parent, global_position, Color(1.2, 2.0, 2.6), 16, 3.0, 0.4, 0.12, -6.0)

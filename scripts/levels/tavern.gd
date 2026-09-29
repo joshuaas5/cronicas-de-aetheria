@@ -154,7 +154,7 @@ func build() -> void:
 	dust.position = Vector3(0, 2.5, 0)
 	build_walls()
 	# people
-	var borin := Npc.new().setup("Borin", "Barbarian", Story.innkeeper, PI * 0.5)
+	var borin := Npc.new().setup("Borin", "Barbarian", Story.innkeeper, PI * 0.5, ["Mug"])
 	borin.position = Vector3(-7.4, 0, -1.2)
 	borin.interact_radius = 2.8
 	add_child(borin)

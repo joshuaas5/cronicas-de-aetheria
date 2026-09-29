@@ -22,6 +22,9 @@ var state_t := 0.0
 var state_len := 0.0
 var cd := 1.0
 var slow := 0.0
+var burn := 0.0
+var burn_tick := 0.0
+var stun := 0.0
 var knock := Vector3.ZERO
 var hit_done := false
 var elite := false
@@ -161,6 +164,17 @@ func apply_slow(t: float) -> void:
 	slow = max(slow, t)
 
 
+func apply_burn(t: float) -> void:
+	burn = max(burn, t)
+
+
+func apply_stun(t: float) -> void:
+	if not is_alive():
+		return
+	stun = max(stun, t)
+	ap.speed_scale = 0.0
+
+
 func _physics_process(dt: float) -> void:
 	state_t += dt
 	cd -= dt * (0.5 if slow > 0.0 else 1.0)
@@ -179,6 +193,22 @@ func _physics_process(dt: float) -> void:
 			m.emission_enabled = true
 			m.emission = Color(0.3, 0.6, 1.0)
 			m.emission_energy_multiplier = 0.6
+	if burn > 0.0 and is_alive():
+		burn -= dt
+		burn_tick -= dt
+		if randf() < 0.4:
+			Fx.burst(get_parent(), global_position + Vector3(randf_range(-0.3, 0.3), randf_range(0.5, 1.6), 0), Color(3.0, 1.2, 0.3), 2, 1.0, 0.4, 0.14, 2.0)
+		if burn_tick <= 0.0:
+			burn_tick = 0.5
+			take_damage(Game.mag * 0.25, Vector3.ZERO, "burn")
+	if stun > 0.0:
+		stun -= dt
+		if stun <= 0.0 and state != "dead":
+			ap.speed_scale = 1.0
+		velocity = knock
+		move_and_slide()
+		global_position.y = 0
+		return
 	var player: Node3D = get_tree().get_first_node_in_group("player")
 	var vel := Vector3.ZERO
 	var spd := speed * (0.45 if slow > 0.0 else 1.0)
@@ -225,7 +255,7 @@ func _physics_process(dt: float) -> void:
 			if not hit_done and k >= 0.48:
 				hit_done = true
 				if player and dist < attack_range + 0.5 and to_p.normalized().dot(_forward()) > 0.3:
-					player.hurt(dmg, global_position)
+					player.hurt(dmg, global_position, self)
 				Sfx.play("swing", -6.0)
 			if k >= 1.0:
 				cd = randf_range(0.9, 1.6)
@@ -274,11 +304,23 @@ func take_damage(amount: float, push: Vector3, kind: String) -> void:
 	knock = push
 	_flash = 0.1
 	var col := Color(1, 1, 1)
-	if kind == "fire":
-		col = Color(1, 0.65, 0.3)
-	elif kind == "ice":
-		col = Color(0.6, 0.85, 1)
-	Fx.number(get_parent(), global_position + Vector3(0, 2.0, 0), "%d" % amount, col)
+	var size := 64
+	var txt := "%d" % amount
+	match kind:
+		"fire", "burn":
+			col = Color(1, 0.65, 0.3)
+			size = 48 if kind == "burn" else 64
+		"ice":
+			col = Color(0.6, 0.85, 1)
+		"bolt":
+			col = Color(0.85, 0.85, 1.0)
+		"crit":
+			col = Color(1.0, 0.85, 0.2)
+			size = 92
+			txt += "!"
+		"thorns":
+			col = Color(0.6, 1.0, 0.5)
+	Fx.number(get_parent(), global_position + Vector3(0, 2.0, 0), txt, col, size)
 	Fx.burst(get_parent(), global_position + Vector3(0, 1.1, 0), Color(2.2, 2.0, 1.6), 12, 4.0, 0.3, 0.08, -8.0)
 	Fx.burst(get_parent(), global_position + Vector3(0, 1.0, 0), Color(0.9, 0.88, 0.8), 6, 3.0, 0.8, 0.07, -12.0, false)
 	Sfx.play("hit")
@@ -286,12 +328,17 @@ func take_damage(amount: float, push: Vector3, kind: String) -> void:
 	hpfill.scale.x = max(0.0, hp / max_hp)
 	if hp <= 0.0:
 		_die()
+	elif kind == "burn" or kind == "thorns":
+		pass
 	elif state != "attack" or amount > max_hp * 0.25:
 		_set_state("hurt", 0.35)
 		_play("Hit_B", 0.05, 1.4)
 
 
 func _die() -> void:
+	ap.speed_scale = 1.0
+	stun = 0.0
+	burn = 0.0
 	_set_state("dead")
 	hpbar.visible = false
 	remove_from_group("enemies")

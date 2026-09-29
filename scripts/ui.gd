@@ -33,6 +33,7 @@ var menu_sel := 0
 var menu_title := ""
 # map
 var map_info := ""
+var tree_sel := "s_edge"
 var ending_t := 0.0
 var gameover_t := 0.0
 
@@ -268,6 +269,9 @@ func _draw_all() -> void:
 		"map":
 			_draw_map(sz)
 			_draw_dialog(sz)
+		"tree":
+			_draw_hud(sz)
+			_draw_tree(sz)
 	_draw_toasts(sz)
 	if fade > 0.0:
 		canvas.draw_rect(Rect2(Vector2.ZERO, sz), Color(0, 0, 0, fade))
@@ -281,7 +285,13 @@ func _draw_hud(sz: Vector2) -> void:
 	_text("K", Vector2(92, 110), disp, 56, GOLD, HORIZONTAL_ALIGNMENT_CENTER)
 	canvas.draw_arc(Vector2(92, 90), 50, 0, TAU, 48, GOLD, 3.0)
 	_text("Kael", Vector2(162, 62), bold, 28, CREAM)
+	_text(Game.CLASSES[Game.cls]["name"], Vector2(232, 62), body, 20, MUTED)
 	_text("Nível %d" % Game.lvl, Vector2(472, 62), bold, 22, GOLD, HORIZONTAL_ALIGNMENT_RIGHT)
+	if Game.essence > 0:
+		var pulse := 0.75 + 0.25 * sin(t * 4.0)
+		_panel(Rect2(24, 166, 250, 44), 0.8, 10)
+		_diamond(Vector2(52, 188), 10)
+		_text("%d Essência  ·  T" % Game.essence, Vector2(72, 197), bold, 22, Color(1.0, 0.9, 0.6, pulse))
 	_bar(Rect2(162, 74, 310, 26), Game.hp / Game.max_hp, Color(0.86, 0.3, 0.22), Color(0.6, 0.15, 0.1), "PV", "%d / %d" % [ceil(Game.hp), Game.max_hp])
 	_bar(Rect2(162, 106, 310, 22), Game.mp / Game.max_mp, Color(0.3, 0.55, 0.95), Color(0.15, 0.3, 0.7), "PM", "%d / %d" % [floor(Game.mp), Game.max_mp])
 	canvas.draw_rect(Rect2(162, 136, 310, 6), Color(0.05, 0.03, 0.02, 0.9))
@@ -305,12 +315,12 @@ func _draw_hud(sz: Vector2) -> void:
 		var act := i == Game.spell_idx
 		canvas.draw_circle(c, 36, Color(0.9, 0.76, 0.42, 0.22) if act else Color(0, 0, 0, 0.4))
 		canvas.draw_arc(c, 36, 0, TAU, 40, Color(1, 0.92, 0.6) if act else Color(0.45, 0.35, 0.2), 4.0 if act else 2.0)
-		var col := Color(1, 1, 1, 1.0 if Game.mp >= Game.SPELLS[id]["cost"] else 0.35)
+		var col := Color(1, 1, 1, 1.0 if Game.mp >= Game.spell_cost(id) else 0.35)
 		canvas.draw_set_transform(Vector2.ZERO)
 		_spell_icon(id, c, 20)
 		if col.a < 1.0:
 			canvas.draw_circle(c, 34, Color(0, 0, 0, 0.5))
-		_text(str(Game.SPELLS[id]["cost"]), c + Vector2(26, 34), bold, 20, Color(0.6, 0.78, 1.0), HORIZONTAL_ALIGNMENT_CENTER, -1, 4)
+		_text(str(Game.spell_cost(id)), c + Vector2(26, 34), bold, 20, Color(0.6, 0.78, 1.0), HORIZONTAL_ALIGNMENT_CENTER, -1, 4)
 	_text(Game.SPELLS[Game.current_spell()]["name"], Vector2(r.get_center().x, r.position.y - 12), bold, 24, Color(1, 0.92, 0.65), HORIZONTAL_ALIGNMENT_CENTER, -1, 5)
 	# boss bar
 	if boss != null and is_instance_valid(boss) and boss.state != "intro" and not boss.dead:
@@ -424,20 +434,20 @@ func _draw_pause(sz: Vector2) -> void:
 	var r := Rect2(sz.x * 0.5 - 520, sz.y * 0.5 - 360, 1040, 720)
 	_panel(r, 0.96)
 	_text("Pausa", Vector2(sz.x * 0.5, r.position.y + 84), disp, 60, Color(1, 0.92, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
-	var rows := [["Nível", Game.lvl], ["Ataque", Game.atk], ["Magia", Game.mag], ["Ouro", Game.gold], ["Poções", Game.potions]]
+	var rows := [["Vocação", Game.CLASSES[Game.cls]["name"]], ["Nível", Game.lvl], ["Ataque", int(Game.atk)], ["Magia", int(Game.mag)], ["Arma", Game.WEAPON_TIERS[Game.weapon_tier]["name"].replace("Lâmina de ", "")], ["Ouro", Game.gold], ["Poções", Game.potions]]
 	for i in rows.size():
-		_text(rows[i][0], Vector2(r.position.x + 90, r.position.y + 170 + i * 44), bold, 30, MUTED)
-		_text(str(rows[i][1]), Vector2(r.position.x + 440, r.position.y + 170 + i * 44), bold, 30, CREAM, HORIZONTAL_ALIGNMENT_RIGHT)
-	var ctl := [["Mover", "WASD / Setas"], ["Espada", "J"], ["Magia", "K"], ["Esquiva", "L / Shift"], ["Trocar magia", "Q / E"], ["Poção", "R"], ["Falar", "Espaço"]]
+		_text(rows[i][0], Vector2(r.position.x + 90, r.position.y + 160 + i * 42), bold, 28, MUTED)
+		_text(str(rows[i][1]), Vector2(r.position.x + 480, r.position.y + 160 + i * 42), bold, 28, CREAM, HORIZONTAL_ALIGNMENT_RIGHT)
+	var ctl := [["Mover", "WASD / Setas"], ["Espada", "J"], ["Magia", "K"], ["Esquiva", "L / Shift"], ["Trocar magia", "Q / E"], ["Poção", "R"], ["Árvore de Mana", "T"]]
 	for i in ctl.size():
 		_text(ctl[i][0], Vector2(r.position.x + 560, r.position.y + 170 + i * 44), bold, 28, MUTED)
 		_text(ctl[i][1], Vector2(r.end.x - 90, r.position.y + 170 + i * 44), bold, 28, Color(1, 0.92, 0.65), HORIZONTAL_ALIGNMENT_RIGHT)
 	var names := []
 	for s in Game.spells:
 		names.append(Game.SPELLS[s]["name"])
-	_text("Magias: " + ", ".join(names), Vector2(sz.x * 0.5, r.position.y + 510), bold, 30, Color(0.7, 0.88, 1.0), HORIZONTAL_ALIGNMENT_CENTER)
+	_text("Magias: " + ", ".join(names), Vector2(sz.x * 0.5, r.position.y + 505), bold, 28, Color(0.7, 0.88, 1.0), HORIZONTAL_ALIGNMENT_CENTER)
 	for i in menu_items.size():
-		var y := r.position.y + 590 + i * 52
+		var y := r.position.y + 560 + i * 46
 		var sel := i == menu_sel
 		_text(("▸  " if sel else "") + String(menu_items[i]["label"]), Vector2(sz.x * 0.5, y), bold, 32, Color(1, 0.92, 0.65) if sel else MUTED, HORIZONTAL_ALIGNMENT_CENTER)
 
@@ -479,3 +489,100 @@ func _draw_ending(sz: Vector2) -> void:
 		var a: float = min(1.0, ending_t - L[1])
 		var f: Font = disp if L[0] == "FIM" else bold
 		_text(L[0], Vector2(sz.x * 0.5, sz.y * L[2]), f, L[3], Color(1, 0.95, 1.0, a) if L[0] != "Espaço para continuar explorando" else Color(1, 0.92, 0.65, a), HORIZONTAL_ALIGNMENT_CENTER, -1, 8)
+
+
+# ---------------------------------------------------------------- Mana Tree screen
+
+const BRANCH_COL := {"sword": Color(1.0, 0.62, 0.3), "magic": Color(0.55, 0.72, 1.0), "life": Color(0.5, 0.95, 0.5)}
+const BRANCH_NAME := {"sword": "Galho da Espada", "magic": "Galho da Magia", "life": "Galho da Vida"}
+
+
+func tree_move(dir: Vector2) -> void:
+	var from: Vector2 = Game.SKILLS[tree_sel]["pos"]
+	var best := ""
+	var bd := 1e9
+	for id in Game.SKILLS:
+		if id == tree_sel:
+			continue
+		var d: Vector2 = Game.SKILLS[id]["pos"] - from
+		if d.normalized().dot(dir) < 0.35:
+			continue
+		var score := d.length() * (2.0 - d.normalized().dot(dir))
+		if score < bd:
+			bd = score
+			best = id
+	if best != "":
+		tree_sel = best
+		Sfx.play("blip", -8.0)
+
+
+func _draw_tree(sz: Vector2) -> void:
+	# the canvas is laid out for 1920x1080; centre it on wider screens
+	var off := Vector2((sz.x - 1920.0) * 0.5, (sz.y - 1080.0) * 0.5)
+	canvas.draw_rect(Rect2(Vector2.ZERO, sz), Color(0.02, 0.03, 0.05, 0.86))
+	_text("Árvore de Mana", Vector2(sz.x * 0.5, 110 + off.y), disp, 72, Color(0.85, 1.0, 0.85), HORIZONTAL_ALIGNMENT_CENTER, -1, 12)
+	_diamond(Vector2(sz.x * 0.5 - 150, 160 + off.y), 12)
+	_text("%d Essência" % Game.essence, Vector2(sz.x * 0.5 + 12, 172 + off.y), bold, 34, Color(1.0, 0.9, 0.6), HORIZONTAL_ALIGNMENT_CENTER)
+	# trunk and roots
+	var base := Vector2(960, 1010) + off
+	var fork := Vector2(960, 820) + off
+	canvas.draw_line(base, fork, Color(0.45, 0.32, 0.2), 34.0)
+	canvas.draw_line(base, fork, Color(0.62, 0.46, 0.3), 14.0)
+	for k in [-1, 1]:
+		canvas.draw_line(base, base + Vector2(k * 140, 40), Color(0.45, 0.32, 0.2), 16.0)
+	for root_id in ["s_edge", "m_flow", "v_root"]:
+		var p: Vector2 = Game.SKILLS[root_id]["pos"] + off
+		canvas.draw_line(fork, p, Color(0.45, 0.32, 0.2), 20.0)
+	# links
+	for id in Game.SKILLS:
+		var s: Dictionary = Game.SKILLS[id]
+		for r in s["req"]:
+			for alt in String(r).split("|"):
+				var a: Vector2 = Game.SKILLS[alt]["pos"] + off
+				var b: Vector2 = s["pos"] + off
+				var lit := Game.has_skill(alt)
+				canvas.draw_line(a, b, Color(0.45, 0.32, 0.2), 14.0)
+				canvas.draw_line(a, b, BRANCH_COL[s["branch"]] * (1.0 if lit else 0.35), 5.0)
+	# branch titles
+	_text(BRANCH_NAME["sword"], Vector2(480, 300) + off, bold, 30, BRANCH_COL["sword"], HORIZONTAL_ALIGNMENT_CENTER, -1, 6)
+	_text(BRANCH_NAME["magic"], Vector2(960, 330) + off + Vector2(250, 0), bold, 30, BRANCH_COL["magic"], HORIZONTAL_ALIGNMENT_CENTER, -1, 6)
+	_text(BRANCH_NAME["life"], Vector2(1440, 300) + off, bold, 30, BRANCH_COL["life"], HORIZONTAL_ALIGNMENT_CENTER, -1, 6)
+	# nodes
+	for id in Game.SKILLS:
+		var s: Dictionary = Game.SKILLS[id]
+		var p: Vector2 = s["pos"] + off
+		var st := Game.skill_state(id)
+		var col: Color = BRANCH_COL[s["branch"]]
+		var pulse := 0.5 + 0.5 * sin(t * 4.0 + p.x * 0.01)
+		if st == "owned":
+			canvas.draw_circle(p, 58, Color(col.r, col.g, col.b, 0.22))
+			canvas.draw_circle(p, 42, col)
+			canvas.draw_circle(p, 34, col.lightened(0.35))
+		elif st == "available":
+			canvas.draw_circle(p, 42, Color(0.08, 0.06, 0.05, 0.95))
+			canvas.draw_arc(p, 42, 0, TAU, 48, Color(col.r, col.g, col.b, 0.5 + 0.5 * pulse), 5.0)
+		else:
+			canvas.draw_circle(p, 38, Color(0.1, 0.1, 0.1, 0.9))
+			canvas.draw_arc(p, 38, 0, TAU, 40, Color(0.35, 0.35, 0.35), 3.0)
+		_text(str(s["cost"]), p + Vector2(0, 12), bold, 34, Color(0.1, 0.06, 0.02) if st == "owned" else (col if st == "available" else Color(0.45, 0.45, 0.45)), HORIZONTAL_ALIGNMENT_CENTER)
+		if id == tree_sel:
+			canvas.draw_arc(p, 54 + pulse * 4.0, 0, TAU, 56, Color(1, 1, 1), 4.0)
+		_text(s["name"], p + Vector2(0, 76), bold, 24, CREAM if st != "locked" else Color(0.55, 0.55, 0.55), HORIZONTAL_ALIGNMENT_CENTER, -1, 6)
+	# detail panel
+	var sel: Dictionary = Game.SKILLS[tree_sel]
+	var r := Rect2(sz.x * 0.5 - 620, sz.y - 190, 1240, 150)
+	_panel(r, 0.95)
+	_text(sel["name"], Vector2(r.position.x + 40, r.position.y + 52), disp, 38, BRANCH_COL[sel["branch"]])
+	_text(sel["desc"], Vector2(r.position.x + 40, r.position.y + 98), bold, 28, CREAM)
+	var st2 := Game.skill_state(tree_sel)
+	var info := ""
+	if st2 == "owned":
+		info = "Aprendida"
+	elif st2 == "locked":
+		info = "Aprenda o galho anterior primeiro"
+	elif Game.essence < sel["cost"]:
+		info = "Custa %d Essência  ·  suba de nível para ganhar mais" % sel["cost"]
+	else:
+		info = "Custa %d Essência  ·  Espaço para aprender" % sel["cost"]
+	_text(info, Vector2(r.end.x - 40, r.position.y + 52), bold, 26, Color(1, 0.92, 0.65) if st2 == "available" else MUTED, HORIZONTAL_ALIGNMENT_RIGHT)
+	_text("Setas para navegar  ·  T ou Esc para fechar", Vector2(sz.x * 0.5, sz.y - 18), body, 22, MUTED, HORIZONTAL_ALIGNMENT_CENTER)

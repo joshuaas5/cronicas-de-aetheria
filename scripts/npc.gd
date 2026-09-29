@@ -7,6 +7,7 @@ var model_name := ""
 var talk: Callable
 var idle_anim := "Idle"
 var is_fairy := false
+var keep: Array = []
 var interact_radius := 2.4
 var model: Node3D
 var ap: AnimationPlayer
@@ -15,9 +16,10 @@ var _yaw := 0.0
 var _t := 0.0
 
 
-func setup(p_name: String, p_model: String, p_talk: Callable, yaw := 0.0) -> Npc:
+func setup(p_name: String, p_model: String, p_talk: Callable, yaw := 0.0, p_keep: Array = []) -> Npc:
 	display_name = p_name
 	model_name = p_model
+	keep = p_keep
 	talk = p_talk
 	_yaw = yaw
 	is_fairy = p_model == "fairy"
@@ -62,8 +64,7 @@ func _ready() -> void:
 		model.add_child(l)
 		model.position.y = 1.4
 	else:
-		model = load("res://assets/characters/adventurers/%s.glb" % model_name).instantiate()
-		model.scale = Vector3.ONE * 0.75
+		model = Chars.instance(model_name, keep)
 		add_child(model)
 		ap = model.find_children("*", "AnimationPlayer", true, false)[0]
 		for a in [idle_anim, "Sit_Chair_Idle", "Idle"]:

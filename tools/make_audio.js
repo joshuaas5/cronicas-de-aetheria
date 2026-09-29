@@ -395,6 +395,7 @@ function makeSfx() {
   sfx('roar', 1.6, b => { tone(b, 0, 95, 45, 1.4, 0.8, 'saw'); tone(b, 0, 142, 70, 1.4, 0.4, 'saw', 0.3); crunch(b, 0, 1.2, 0.5, 0.04); }, 0.3);
   sfx('bloom', 2.2, b => arp(b, [330, 494, 659, 831, 988, 1319, 1661], 0.12, (t, f) => bell(b, t, f, 1.2, 0.2, Math.sin(t * 7) * 0.5)), 0.5);
   sfx('spawn', 0.9, b => { crunch(b, 0, 0.7, 0.6, 0.06); tone(b, 0.1, 80, 160, 0.6, 0.3, 'saw'); }, 0.2);
+  sfx('zap', 0.6, b => { for (let i = 0; i < 14; i++) { const t = i * 0.025; crunch(b, t, 0.03, 0.7, 0.9); tone(b, t, 3000 - i * 120, 900, 0.03, 0.3, 'square', (i % 2) - 0.5); } tone(b, 0, 180, 60, 0.4, 0.5, 'saw'); }, 0.25);
   sfx('bones', 0.7, b => { for (let i = 0; i < 9; i++) { const t = i * 0.05 + rand() * 0.03; tone(b, t, 900 + rand() * 900, 500, 0.05, 0.3, 'square', rand() - 0.5); crunch(b, t, 0.04, 0.3, 0.6); } });
 }
 

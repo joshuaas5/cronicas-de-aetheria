@@ -31,7 +31,10 @@ static func elder() -> void:
 		say([
 			{"n": "Ancião Bram", "t": "Sinto o bosque respirar outra vez! Você libertou o Carvalho Ancião."},
 			{"n": "Ancião Bram", "t": "Aceite o que um velho ainda sabe ensinar: a magia da Cura. E a Lágrima da Lua que você trouxe... plante-a. Ela mostrará o Santuário de Mana."},
-		], func(): Game.learn("heal"))
+			{"n": "Ancião Bram", "t": "E mais uma coisa: meu velho cajado. No Altar das Vocações, ele abre o caminho do Mago para você."},
+		], func():
+			Game.learn("heal")
+			Game.unlock_class("mage"))
 	elif F.get("ending", false):
 		say([{"n": "Ancião Bram", "t": "A Árvore de Mana floresce como nos contos da minha avó. Aetheria deve tudo a você, Kael."}])
 	elif F.get("boss_defeated", false):
@@ -43,6 +46,12 @@ static func elder() -> void:
 
 
 static func farmer() -> void:
+	if Game.lands.has("forest") and not Game.classes.has("rogue"):
+		say([
+			{"n": "Lina", "t": "Você plantou o Bosque Sussurrante! Dá para ver as copas daqui da plantação."},
+			{"n": "Lina", "t": "Leve minhas adagas de colheita. São leves e rápidas. No Altar das Vocações você pode seguir o caminho da Ladina."},
+		], func(): Game.unlock_class("rogue"))
+		return
 	if not Game.flags.get("met_farmer", false):
 		Game.flags["met_farmer"] = true
 		say([
@@ -54,6 +63,12 @@ static func farmer() -> void:
 
 
 static func innkeeper() -> void:
+	if Game.lvl >= 4 and not Game.classes.has("barbarian"):
+		say([
+			{"n": "Borin", "t": "Olha só esses braços! Você não é mais o garoto magricela que entrava aqui pedindo leite."},
+			{"n": "Borin", "t": "Tome meu machado dos tempos de aventura. No Altar das Vocações ele desperta o Bárbaro em você."},
+		], func(): Game.unlock_class("barbarian"))
+		return
 	say([{"n": "Borin", "t": "Bem-vindo ao Javali Dourado! O que vai ser?", "ch": [
 		{"l": "Descansar (10 ouro)", "f": _rest},
 		{"l": "Poção (15 ouro)", "f": _buy_potion},
@@ -136,3 +151,48 @@ static func intro() -> void:
 
 static func boss_defeated() -> void:
 	say([{"n": "", "t": "A sombra se dissolve em luz. O Carvalho Ancião volta a dormir em paz, e algo cintilante cai de seus galhos."}], func(): Game.give_artifact("tear"))
+
+
+
+# ---------------------------------------------------------------- vocations and the forge
+
+static func altar() -> void:
+	var ch := []
+	for id in Game.CLASSES:
+		if not Game.classes.has(id):
+			continue
+		var label: String = Game.CLASSES[id]["name"] + ("  (atual)" if id == Game.cls else "")
+		ch.append({"l": label, "f": Callable(Story, "_choose_class").bind(id)})
+	ch.append({"l": "Voltar", "f": _nothing})
+	var locked := Game.CLASSES.size() - Game.classes.size()
+	var hint := "" if locked == 0 else "  Ainda há %d vocações adormecidas." % locked
+	say([{"n": "Altar das Vocações", "t": "A pedra vibra sob sua mão. Qual caminho você quer seguir?" + hint, "ch": ch}])
+
+
+static func _choose_class(id: String) -> void:
+	if id == Game.cls:
+		say([{"n": "Altar das Vocações", "t": "Você já segue esse caminho."}])
+		return
+	Game.set_class(id)
+	say([{"n": "Altar das Vocações", "t": Game.CLASSES[id]["name"] + ": " + Game.CLASSES[id]["desc"]}])
+
+
+static func smith() -> void:
+	var t := Game.weapon_tier
+	if t >= Game.WEAPON_TIERS.size() - 1:
+		say([{"n": "Ferro, o ferreiro", "t": "A Lâmina Ancestral. Não há metal no mundo que eu saiba trabalhar melhor que isso."}])
+		return
+	var nxt: Dictionary = Game.WEAPON_TIERS[t + 1]
+	say([{"n": "Ferro, o ferreiro", "t": "Sua arma hoje é uma %s. Posso forjar uma %s por %d de ouro. Serve para qualquer vocação." % [Game.WEAPON_TIERS[t]["name"], nxt["name"], nxt["cost"]], "ch": [
+		{"l": "Forjar (%d ouro)" % nxt["cost"], "f": _forge},
+		{"l": "Agora não", "f": _nothing},
+	]}])
+
+
+static func _forge() -> void:
+	if not Game.upgrade_weapon():
+		say([{"n": "Ferro, o ferreiro", "t": "Faltam moedas. Os esqueletos do bosque costumam carregar umas."}])
+		return
+	Sfx.play("level")
+	main.shake(0.2)
+	say([{"n": "Ferro, o ferreiro", "t": "Pronto! A %s está quente ainda. Cuidado com os dedos." % Game.WEAPON_TIERS[Game.weapon_tier]["name"]}])

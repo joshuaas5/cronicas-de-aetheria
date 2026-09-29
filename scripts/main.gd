@@ -112,24 +112,42 @@ func _test_boot() -> void:
 		Game.lands["forest"] = Vector2i(3, 0)
 		Game.lands["sanctuary"] = Vector2i(2, 2)
 	if args.has("spells"):
-		Game.spells = ["fire", "ice", "heal"]
+		Game.spells = ["fire", "ice", "heal", "bolt"]
+	if args.has("cls"):
+		Game.classes = Game.CLASSES.keys()
+		Game.cls = args["cls"]
+	if args.has("allskills"):
+		Game.skills = Game.SKILLS.keys()
+	Game.recalc()
+	Game.hp = Game.max_hp
+	Game.mp = Game.max_mp
 	_load_level(args["level"], args.get("spawn", ""), true)
 	state = "map" if args["level"] == "map" else "play"
 	ui.mode = "map" if state == "map" else "play"
+	if args.has("gold"):
+		Game.gold = int(args["gold"])
+	if args.has("lvl"):
+		Game.lvl = int(args["lvl"])
+		Game.recalc()
 	if args.has("say"):
 		Callable(Story, args["say"]).call()
 	if args.has("strong"):
-		Game.atk = 40
-		Game.mag = 40
-		Game.max_hp = 500
-		Game.hp = 500
+		Game.lvl = 16
+		Game.essence = 30
+		Game.recalc()
+		Game.hp = Game.max_hp
+	if args.has("tree"):
+		Game.essence = 5
+		Game.skills = ["s_edge", "s_crit", "m_flow", "v_root", "v_potion"]
+		ui.tree_sel = "m_blaze"
+		_open_tree()
 	if args.has("shot"):
 		_take_shot()
 	elif args.has("seconds"):
 		await get_tree().create_timer(float(args["seconds"])).timeout
 		for b in get_tree().get_nodes_in_group("boss"):
 			print("BOSS hp=", b.hp, " state=", b.state, " pos=", b.global_position, " player=", player.global_position)
-		print("AUTOPLAY END level=%s hp=%d lvl=%d xp=%d gold=%d enemies=%d flags=%s arts=%s lands=%s" % [Game.current_level, Game.hp, Game.lvl, Game.xp, Game.gold, get_tree().get_nodes_in_group("enemies").size(), str(Game.flags), str(Game.arts), str(Game.lands)])
+		print("AUTOPLAY END level=%s hp=%d lvl=%d xp=%d gold=%d enemies=%d flags=%s arts=%s lands=%s cls=%s classes=%s tier=%d skills=%d" % [Game.current_level, Game.hp, Game.lvl, Game.xp, Game.gold, get_tree().get_nodes_in_group("enemies").size(), str(Game.flags), str(Game.arts), str(Game.lands), Game.cls, str(Game.classes), Game.weapon_tier, Game.skills.size()])
 		get_tree().quit()
 
 
@@ -321,6 +339,9 @@ func _play_update(dt: float) -> void:
 			player.frozen = false
 			ui.banner("Aetheria floresce")
 		return
+	if ui.mode == "tree":
+		_tree_update()
+		return
 	if paused:
 		var c := ui.menu_input()
 		if Input.is_action_just_pressed("pause") or c == "resume":
@@ -329,12 +350,14 @@ func _play_update(dt: float) -> void:
 			Env.quality = (Env.quality + 1) % 3
 			_save_quality()
 			_pause_menu()
-			ui.menu_sel = 1
+			ui.menu_sel = 2
 			ui.toast("Qualidade aplicada ao carregar a próxima área")
 		elif c == "title":
 			Game.save_game()
 			_set_paused(false)
 			_to_title()
+		elif c == "tree":
+			_open_tree()
 		return
 	if ui.dialog_active():
 		player.frozen = true
@@ -344,6 +367,9 @@ func _play_update(dt: float) -> void:
 		return
 	if Input.is_action_just_pressed("pause"):
 		_set_paused(true)
+		return
+	if Input.is_action_just_pressed("tree"):
+		_open_tree()
 		return
 	# interaction prompt
 	var t := _nearest_talkable()
@@ -371,6 +397,7 @@ func _set_paused(v: bool) -> void:
 func _pause_menu() -> void:
 	ui.open_menu("", [
 		{"id": "resume", "label": "Continuar"},
+		{"id": "tree", "label": "Árvore de Mana"},
 		{"id": "quality", "label": "Qualidade: " + ["Baixa", "Alta", "Ultra"][Env.quality]},
 		{"id": "title", "label": "Salvar e voltar ao título"},
 	])
@@ -456,7 +483,7 @@ func on_enemy_killed(e: Enemy) -> void:
 	var coins: int = min(g, 4)
 	for i in coins:
 		_drop("coin", e.global_position, int(ceil(float(g) / coins)))
-	if randf() < 0.2:
+	if randf() < (0.35 if Game.has_skill("v_potion") else 0.2):
 		_drop("heart", e.global_position)
 	elif randf() < 0.2:
 		_drop("mana", e.global_position)
@@ -489,6 +516,8 @@ func _on_boss_defeated() -> void:
 	level.exits_locked = false
 	Game.flags["boss_defeated"] = true
 	Game.gold += 60
+	Game.essence += 2
+	ui.toast("+2 Essência de Mana")
 	if Game.gain_xp(160):
 		_level_up_fx()
 	Sfx.music(level.music)
@@ -505,8 +534,8 @@ func _on_player_died() -> void:
 
 func start_ending() -> void:
 	Game.flags["ending"] = true
-	Game.max_hp += 20
-	Game.max_mp += 10
+	Game.essence += 2
+	Game.recalc()
 	Game.hp = Game.max_hp
 	Game.mp = Game.max_mp
 	Game.save_game()
@@ -516,3 +545,30 @@ func start_ending() -> void:
 	ui.ending_t = 0.0
 	if level.has_method("bloom"):
 		level.bloom()
+
+
+# ---------------------------------------------------------------- Mana Tree
+
+func _open_tree() -> void:
+	paused = true
+	get_tree().paused = true
+	ui.mode = "tree"
+	Sfx.play("select")
+
+
+func _tree_update() -> void:
+	for pair in [["move_left", Vector2.LEFT], ["move_right", Vector2.RIGHT], ["move_up", Vector2.UP], ["move_down", Vector2.DOWN]]:
+		if Input.is_action_just_pressed(pair[0]):
+			ui.tree_move(pair[1])
+	if Input.is_action_just_pressed("interact") or Input.is_action_just_pressed("attack"):
+		var id := ui.tree_sel
+		if Game.buy_skill(id):
+			Sfx.play("bloom")
+			ui.toast("Aprendido: " + Game.SKILLS[id]["name"])
+		else:
+			Sfx.play("blip")
+	if Input.is_action_just_pressed("tree") or Input.is_action_just_pressed("pause"):
+		paused = false
+		get_tree().paused = false
+		ui.mode = "play"
+		Sfx.play("blip")

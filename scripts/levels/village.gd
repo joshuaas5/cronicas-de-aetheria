@@ -135,9 +135,9 @@ func build() -> void:
 	finish_batches()
 	build_walls()
 	# NPCs and examinables
-	add_child(Npc.new().setup("Ancião Bram", "Mage", Story.elder, 0.3))
+	add_child(Npc.new().setup("Ancião Bram", "Mage", Story.elder, 0.3, ["2H_Staff"]))
 	get_child(get_child_count() - 1).position = Vector3(-10, 0, -4.2)
-	var lina := Npc.new().setup("Lina", "Rogue", Story.farmer, -1.2)
+	var lina := Npc.new().setup("Lina", "Rogue", Story.farmer, -1.2, ["1H_Crossbow"])
 	lina.position = Vector3(-11.2, 0, 6.2)
 	add_child(lina)
 	var well_pt := InteractPoint.new().setup("Poço antigo", Story.well, 2.2, 2.9)
@@ -146,6 +146,9 @@ func build() -> void:
 	var sign_pt := InteractPoint.new().setup("Placa", Story.sign_road, 2.2, 2.6)
 	sign_pt.position = Vector3(26, 0, -0.5)
 	add_child(sign_pt)
+	_altar(Vector3(4.2, 0, 4.2))
+	if Game.lands.has("forest"):
+		_forge(Vector3(19.0, 0, 7.0))
 	_butterflies()
 
 
@@ -194,3 +197,62 @@ func _butterflies() -> void:
 	for i in 6:
 		var p := Fx.emitter(self, [Color(2.4, 1.2, 1.8), Color(2.4, 2.2, 0.8), Color(1.2, 1.8, 2.6)][i % 3], 3, 3.0, 0.14, 0.8, 0.05, Vector3(6, 1.2, 4))
 		p.position = Vector3(randf_range(-24, 24), 1.2, randf_range(-3, 11))
+
+
+
+func _altar(pos: Vector3) -> void:
+	var stone := Env.pbr("medieval_blocks_02", 1.2, Color(0.9, 0.9, 0.95), true)
+	Build.cyl(self, pos + Vector3(0, 0.15, 0), 1.1, 1.2, 0.3, stone, 8)
+	Build.cyl(self, pos + Vector3(0, 0.75, 0), 0.45, 0.6, 0.9, stone, 8)
+	Build.cyl(self, pos + Vector3(0, 1.25, 0), 0.7, 0.55, 0.14, stone, 8)
+	var crystal := MeshInstance3D.new()
+	var pm := CylinderMesh.new()
+	pm.top_radius = 0.0
+	pm.bottom_radius = 0.28
+	pm.height = 0.8
+	pm.radial_segments = 6
+	crystal.mesh = pm
+	crystal.material_override = Env.emissive(Color(1.0, 0.8, 0.45), 3.0)
+	crystal.position = pos + Vector3(0, 2.0, 0)
+	crystal.name = "AltarCrystal"
+	add_child(crystal)
+	var tw := crystal.create_tween().set_loops()
+	tw.tween_property(crystal, "rotation:y", TAU, 6.0).from(0.0)
+	var l := OmniLight3D.new()
+	l.light_color = Color(1.0, 0.82, 0.5)
+	l.light_energy = 1.6
+	l.omni_range = 5.0
+	l.position = pos + Vector3(0, 2.0, 0)
+	add_child(l)
+	Fx.emitter(self, Color(2.4, 2.0, 1.0), 30, 2.5, 0.06, 0.3, 0.4, Vector3(0.5, 0.1, 0.5)).position = pos + Vector3(0, 1.4, 0)
+	Env.pillar(self, pos, 1.0, 2.0)
+	var pt := InteractPoint.new().setup("Altar das Vocações", Story.altar, 2.4, 3.0)
+	pt.position = pos
+	add_child(pt)
+
+
+func _forge(pos: Vector3) -> void:
+	var wood := Env.pbr("medieval_wood", 0.8, Color(0.62, 0.46, 0.34), true)
+	var stone := Env.pbr("medieval_blocks_02", 0.8, Color(0.85, 0.82, 0.8), true)
+	var roof := Env.pbr("roof_tiles_14", 0.55, Color(0.85, 0.7, 0.6), true)
+	for p in [Vector3(-2.2, 0, -1.6), Vector3(2.2, 0, -1.6), Vector3(-2.2, 0, 1.6), Vector3(2.2, 0, 1.6)]:
+		Build.box(self, pos + p + Vector3(0, 1.6, 0), Vector3(0.25, 3.2, 0.25), wood)
+	Build.box(self, pos + Vector3(0, 3.35, 0), Vector3(5.4, 0.2, 4.2), roof, Vector3(0.12, 0, 0))
+	Build.box(self, pos + Vector3(-1.2, 0.8, -1.2), Vector3(1.6, 1.6, 1.2), stone)
+	Build.box(self, pos + Vector3(-1.2, 0.55, -0.6), Vector3(0.9, 0.6, 0.1), Env.emissive(Color(1.0, 0.45, 0.12), 3.0))
+	var fire := Fx.emitter(self, Color(3.2, 1.3, 0.35), 50, 0.8, 0.25, 1.2, 2.0, Vector3(0.35, 0.1, 0.2))
+	fire.position = pos + Vector3(-1.2, 0.5, -0.5)
+	var l := OmniLight3D.new()
+	l.light_color = Color(1.0, 0.55, 0.2)
+	l.light_energy = 2.5
+	l.omni_range = 6.0
+	l.position = pos + Vector3(-1.2, 1.0, 0.2)
+	add_child(l)
+	Build.box(self, pos + Vector3(0.9, 0.45, 0.3), Vector3(0.5, 0.9, 0.5), wood)
+	Build.box(self, pos + Vector3(0.9, 0.98, 0.3), Vector3(0.9, 0.18, 0.4), Env.pbr("rock_wall_08", 1.0, Color(0.4, 0.4, 0.45), true))
+	Env.prop(self, "Barrel_01", pos + Vector3(2.0, 0, 1.2), 1.0, 0.4)
+	Env.pillar(self, pos + Vector3(-1.2, 0, -1.2), 1.0)
+	Env.pillar(self, pos + Vector3(0.9, 0, 0.3), 0.5)
+	var smith := Npc.new().setup("Ferro, o ferreiro", "Knight", Story.smith, -0.4, ["2H_Sword"])
+	smith.position = pos + Vector3(0.6, 0, 1.4)
+	add_child(smith)

@@ -230,3 +230,42 @@ static func glow_sphere(radius: float, color: Color, energy := 3.0) -> MeshInsta
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
+
+
+## Jagged glowing bolt through the given points.
+static func lightning(parent: Node, pts: Array) -> void:
+	var im := ImmediateMesh.new()
+	var mi := MeshInstance3D.new()
+	mi.mesh = im
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = Color(2.6, 2.6, 4.0)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in pts.size() - 1:
+		var a: Vector3 = pts[i]
+		var b: Vector3 = pts[i + 1]
+		var segs := int(a.distance_to(b) / 0.5) + 2
+		var prev := a
+		for k in range(1, segs + 1):
+			var t := float(k) / segs
+			var p := a.lerp(b, t)
+			if k < segs:
+				p += Vector3(randf_range(-0.35, 0.35), randf_range(-0.35, 0.35), randf_range(-0.35, 0.35))
+			var side := (p - prev).cross(Vector3.UP).normalized() * 0.07
+			im.surface_add_vertex(prev - side)
+			im.surface_add_vertex(prev + side)
+			im.surface_add_vertex(p + side)
+			im.surface_add_vertex(prev - side)
+			im.surface_add_vertex(p + side)
+			im.surface_add_vertex(p - side)
+			prev = p
+	im.surface_end()
+	var tw := mi.create_tween()
+	tw.tween_property(m, "albedo_color:a", 0.0, 0.3)
+	tw.tween_callback(mi.queue_free)

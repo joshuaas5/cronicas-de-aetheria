@@ -110,6 +110,10 @@ func is_alive() -> bool:
 	return not dead and state != "intro" and state != "dying"
 
 
+func apply_stun(_t: float) -> void:
+	pass
+
+
 func can_be_hit() -> bool:
 	return is_alive()
 
@@ -237,7 +241,7 @@ func _root_spike(pos: Vector3) -> void:
 		Sfx.play("hit", -4.0)
 		var pl: Node3D = get_tree().get_first_node_in_group("player")
 		if pl and Vector2(pl.global_position.x - pos.x, pl.global_position.z - pos.z).length() < 1.2:
-			pl.hurt(13.0 if phase == 2 else 10.0, pos)
+			pl.hurt(13.0 if phase == 2 else 10.0, pos, null)
 	)
 
 
@@ -252,7 +256,7 @@ func _slam(player: Node3D) -> void:
 	if player:
 		var d := Vector2(player.global_position.x - front.x, player.global_position.z - front.z).length()
 		if d < 5.0:
-			player.hurt(16.0 if phase == 2 else 12.0, global_position)
+			player.hurt(16.0 if phase == 2 else 12.0, global_position, self)
 
 
 func take_damage(amount: float, _push: Vector3, kind: String) -> void:
@@ -263,7 +267,9 @@ func take_damage(amount: float, _push: Vector3, kind: String) -> void:
 	hp -= amount
 	_flash = 0.1
 	var col := Color(1, 0.65, 0.3) if kind == "fire" else Color(0.9, 0.8, 1.0)
-	Fx.number(_level, global_position + Vector3(randf_range(-1.5, 1.5), randf_range(3.5, 6.0), 1.5), ("%d!" if kind == "fire" else "%d") % amount, col, 80 if kind == "fire" else 64)
+	if kind == "crit":
+		col = Color(1.0, 0.85, 0.2)
+	Fx.number(_level, global_position + Vector3(randf_range(-1.5, 1.5), randf_range(3.5, 6.0), 1.5), ("%d!" if kind in ["fire", "crit"] else "%d") % amount, col, 90 if kind in ["fire", "crit"] else 64)
 	Sfx.play("hit")
 	if phase == 1 and hp < max_hp * 0.5:
 		phase = 2

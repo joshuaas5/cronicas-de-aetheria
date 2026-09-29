@@ -16,8 +16,15 @@ RPG de ação medieval com magia, feito em Godot 4.7. Cenários com assets escan
 | Trocar magia | Q / E | LB / RB |
 | Poção | R | Back |
 | Falar / confirmar | Espaço / Enter | A |
+| Árvore de Mana | T | L3 |
 | Pausa | Esc | Start |
 | Som liga/desliga | M | — |
+
+## Progressão
+
+- **Árvore de Mana (T):** cada nível dá 1 Essência, e chefes dão mais. Três galhos (Espada, Magia, Vida), com 15 habilidades: críticos, giro, investida, quarto golpe, Chama Voraz, Nevasca, a magia Relâmpago, Eco Arcano, regeneração, espinhos e Renascer.
+- **Vocações:** Cavaleiro, Ladina, Bárbaro e Mago, liberadas pela história e trocadas no Altar das Vocações, na praça da vila.
+- **Forja:** depois que o bosque é plantado, o ferreiro Ferro chega à vila e forja cinco níveis de arma.
 
 ## A história
 
